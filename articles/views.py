@@ -11,6 +11,7 @@ from .serializers import (
     ArticaleCraeteSerializer,
     ArticleRetrieveSerializer,
     ArticleSerializer,
+    PatientArticleSerializer,  # استيراد السيريالايزر النظيف الجديد للمريض
     ReactionSerializer,
     DeleteArticleSerializer,
     ArticleUpdateSerializer
@@ -33,14 +34,14 @@ class ArticleCreateAPIView(generics.CreateAPIView):
 
 class ArticleRetrieveAPIView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ArticleRetrieveSerializer
+    serializer_class = PatientArticleSerializer # المريض عند جلب مقالة مفردة يرى بيانات نظيفة أيضاً
     
     def get_queryset(self):
         return Article.objects.with_reactions(user=self.request.user).filter(status="Approved")
 
 class ArticleListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
-    serializer_class = ArticleRetrieveSerializer
+    serializer_class = ArticleSerializer # الطبيب يحتاج لرؤية التفاصيل الكاملة بما فيها الـ status لمقالاته
     pagination_class = ArticlePagination
 
     def get_queryset(self):
@@ -55,7 +56,7 @@ class ArticleListAPIView(generics.ListAPIView):
 
 class RecommendedArticlesAPIView(generics.ListAPIView):
     pagination_class = ArticlePagination
-    serializer_class = ArticleSerializer
+    serializer_class = PatientArticleSerializer # المريض يرى التوصيات بدون حقول إدارية زائدة
     permission_classes = [permissions.IsAuthenticated, IsPatient]
 
     def get_queryset(self):
@@ -73,28 +74,27 @@ class RecommendedArticlesAPIView(generics.ListAPIView):
 
 class AllApprovedArticlesListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ArticleSerializer
+    serializer_class = PatientArticleSerializer # 🌟 تعديل أساسي: استخدام السيريالايزر النظيف للمريض والزوار
     pagination_class = ArticlePagination
 
     def get_queryset(self):
+        # يضمن سحب المقالات المقبولة فقط ومرتبة من الأحدث للأقدم
         return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-created_at')
 
 class ArticlesMostReactionScoreListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ArticleSerializer
+    serializer_class = PatientArticleSerializer # التريند للمرضى يعرض مخرجات نظيفة
     pagination_class = ArticlePagination
 
     def get_queryset(self):
         return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-score', '-likes')
 
-# الـ View الجديد المخصص لتعديل المقالة وإعادتها لقسم المراجعة للأدمن
 class ArticleUpdateAPIView(generics.UpdateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     serializer_class = ArticleUpdateSerializer
     lookup_field = 'pk'
 
     def get_queryset(self):
-        # يضمن ألا يقوم الطبيب بتعديل أي مقال لا يخصه
         return Article.objects.filter(author=self.request.user.doctor)
 
 class ReactionGenericAPIView(generics.GenericAPIView):
@@ -120,7 +120,7 @@ class ReactionGenericAPIView(generics.GenericAPIView):
                 return Response({"message": f"{reaction_type} updated"}, status=status.HTTP_200_OK)
         
         Reaction.objects.create(user=user, article=article, reaction=reaction_type)
-        return Response({"message": f"{reaction_type} added"}, status=status.HTTP_210_CREATED if status.HTTP_201_CREATED else status.HTTP_200_OK)
+        return Response({"message": f"{reaction_type} added"}, status=status.HTTP_201_CREATED)
 
 class DeleteArticleGenericAPIView(generics.GenericAPIView):
     serializer_class = DeleteArticleSerializer

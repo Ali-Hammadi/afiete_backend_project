@@ -61,6 +61,7 @@ class DeleteArticleSerializer(serializers.ModelSerializer):
         model = Article
         fields = []
 
+# الـ Serializer العام والمفصل المخصص للأطباء ولوحات التحكم الإدارية
 class ArticleSerializer(serializers.ModelSerializer): 
     likes = serializers.IntegerField(read_only=True, default=0)
     dislikes = serializers.IntegerField(read_only=True, default=0)
@@ -73,10 +74,24 @@ class ArticleSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'content', 'status', 'author', 'specialization', 
-            'likes', 'dislikes', 'score', 'reaction', 'created_at'
+            'likes', 'dislikes', 'score', 'reaction', 'created_at', 'updated_at'
         ]
 
-# الـ Serializer المطور والجديد الخاص بعملية التعديل وإرسالها للأدمن
+# 🌟 الـ Serializer الجديد والمطور المخصص للمريض والزوار (نظيف وبدون حقول إدارية أو تكرار لحالة المقال)
+class PatientArticleSerializer(serializers.ModelSerializer):
+    likes = serializers.IntegerField(read_only=True, default=0)
+    dislikes = serializers.IntegerField(read_only=True, default=0)
+    reaction = serializers.CharField(source='annotated_reaction', read_only=True, default=None)
+    author = AuthorSerializer(read_only=True)
+    specialization = SpecializationSerializer(read_only=True)
+
+    class Meta:
+        model = Article
+        fields = [
+            'id', 'title', 'content', 'author', 'specialization', 
+            'likes', 'dislikes', 'reaction', 'created_at'
+        ]
+
 class ArticleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
@@ -89,6 +104,5 @@ class ArticleUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        # عند قيام الطبيب بالتعديل، تعود حالة المقالة تلقائياً إلى "قيد المراجعة" للأدمن
         instance.status = "Pending"
         return super().update(instance, validated_data)
