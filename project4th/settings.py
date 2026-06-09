@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 from os import path
 from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,7 +27,8 @@ SECRET_KEY = 'django-insecure-2my-8j*rn&56tip%fgz9ft9b1!zv4t9nfh$5u4e8=&3oe2mk5p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["192.168.1.8"]
+# تم تعديلها لتسمح برابط السيرفر الجديد والـ Localhost
+ALLOWED_HOSTS = ["alihammadi.pythonanywhere.com", "127.0.0.1", "localhost"]
 
 
 # Application definition
@@ -132,11 +134,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# تم إضافة السطر البرمجي المفقود هنا لحل مشكلة الـ collectstatic وسحب واجهات Swagger
+STATIC_ROOT = BASE_DIR / 'static'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = path.join( BASE_DIR, 'media' )
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
@@ -151,13 +157,19 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Afiete Project API',
-    'DESCRIPTION': '',
+    'DESCRIPTION': 'Backend endpoints documentation for Afiete Application',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    # OTHER SETTINGS
+    # لضمان عدم حدوث مشاكل في قراءة الرابط من تطبيق الفلوتر أو السيرفر
+    'SERVERS': [
+        {'url': 'https://alihammadi.pythonanywhere.com', 'description': 'Production Server'},
+        {'url': 'http://127.0.0.1:8000', 'description': 'Local Development Server'},
+    ],
 }
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
