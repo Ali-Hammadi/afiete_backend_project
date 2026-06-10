@@ -1,8 +1,15 @@
+# Path: articles/urls.py
+
 from django.urls import path
 from .views import (
-    ArticleListAPIView, ArticleCreateAPIView, ArticleRepositoryAPIView, 
-    ArticleRetrieveAPIView, DeleteArticleGenericAPIView, AllApprovedArticlesListAPIView, 
-    RecommendedArticlesAPIView, ArticlesMostReactionScoreListAPIView, ReactionGenericAPIView, 
+    ArticleListAPIView,
+    ArticleCreateAPIView,
+    ArticleRetrieveAPIView,
+    DeleteArticleGenericAPIView,
+    AllApprovedArticlesListAPIView,
+    RecommendedArticlesAPIView,
+    ArticlesMostReactionScoreListAPIView,
+    ReactionGenericAPIView,
     ArticleUpdateAPIView
 )
 
