@@ -9,34 +9,51 @@ User = get_user_model()
 
 class Appointment(models.Model):
     class Status(models.TextChoices):
-        Pending = 'pending', 'Pending'          # محجوز بانتظار الدفع
-        Confirmed = 'confirmed', 'Confirmed'    # مدفوع ومؤكد
-        Cancelled = 'cancelled', 'Cancelled'    # ملغي
-        Completed = 'completed', 'Completed'    # منتهي
-        Expired = 'expired', 'Expired'          # انتهت صلاحية نافذة الحجز دون دفع
-        Missed = 'missed', 'Missed'            # ➕ جلسة فائتة (لم يحضرها المريض)
+        PENDING = 'pending', 'Pending'
+        CONFIRMED = 'confirmed', 'Confirmed'
+        CANCELLED = 'cancelled', 'Cancelled'
+        COMPLETED = 'completed', 'Completed'
+        MISSED = 'missed', 'Missed'  # Doctor No-Show
+        PATIENT_MISSED = 'patient_missed', 'Patient Missed'
 
+    class PaymentStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        TRANSFERRED = 'transferred', 'Transferred to Doctor'
+        REFUNDED = 'refunded', 'Refunded'
+        PARTIAL = 'partial', 'Partial Payment'
+    
     class Type(models.TextChoices):
-        Video = 'video', 'Video'
-        Audio = 'audio', 'Audio'
-        TextMessage = 'text_message', 'Text Message'
+        CHAT = 'chat', 'Chat'       # دردشة
+        VOICE = 'voice', 'Voice'     # صوت
+        VIDEO = 'video', 'Video'     # فيديو
 
-    type = models.CharField(max_length=100, choices=Type.choices, default=Type.TextMessage)
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='appointments')
     doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='appointments')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    type = models.CharField(max_length=20, choices=Type.choices, default=Type.CHAT)
     date = models.DateTimeField()
-    duration = models.IntegerField()  # بالدقائق
-    status = models.CharField(max_length=100, choices=Status.choices, default=Status.Pending)
-    
-    # ➕ متغير الكورس العلاجي: المريض هو من يحدد استمرارية الجلسات القادمة أو إغلاق الخطة العلاجية
-    has_next_session = models.BooleanField(default=True, null=True, blank=True)
-    
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
-    cancelled_by = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
-        return f"Mtg {self.pk} - {self.patient.user.username} with {self.doctor.user.username} ({self.status})"
+        return f"Appointment {self.id} - {self.status}"
+
+class Payment(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        COMPLETED = 'completed', 'Completed'
+        REFUNDED = 'refunded', 'Refunded'
+        REJECTED = 'rejected', 'Rejected'
+
+    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='payment')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    admin_commission = models.DecimalField(max_digits=10, decimal_places=2)
+    doctor_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    is_transferred_to_doctor = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    date = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Payment {self.id} - Status: {self.status}"
 
 
 class SessionPrice(models.Model):
@@ -80,6 +97,5 @@ class Review(models.Model):
     rating = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
     def __str__(self):
         return f"Review {self.rating} for {self.doctor.user.username}"

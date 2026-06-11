@@ -1,4 +1,6 @@
-from django.shortcuts import get_object_or_404
+from datetime import timedelta
+
+from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework import status, permissions, generics
@@ -411,3 +413,23 @@ class BookAppointmentView(CreateAPIView):
                 doctor=appointment.doctor, 
                 assessment=latest_assessment
             )
+            
+def financial_dashboard(request):
+    now = timezone.now()
+    periods = {
+        'Daily': now - timedelta(days=1),
+        'Weekly': now - timedelta(weeks=1),
+        'Monthly': now - timedelta(days=30),
+        'Yearly': now - timedelta(days=365)
+    }
+
+    stats = {}
+    for label, start_date in periods.items():
+        queryset = Payment.objects.filter(date__gte=start_date, status='completed')
+        stats[label] = {
+            'total_volume': queryset.aggregate(Sum('amount'))['amount__sum'] or 0,
+            'admin_profit': queryset.aggregate(Sum('admin_commission'))['admin_commission__sum'] or 0,
+            'doctors_payout': queryset.aggregate(Sum('doctor_amount'))['doctor_amount__sum'] or 0
+        }
+
+    return render(request, 'admin/financial_dashboard.html', {'stats': stats})
