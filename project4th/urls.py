@@ -28,6 +28,8 @@ urlpatterns = [
         path('appointments/', include('appointments.urls')), # لوحة تحكم الطبيب للمواعيد
         path('articles/', include('articles.urls')),         # إدارة مقالات الطبيب (إنشاء، تعديل، حذف)
     ])),
+    
+    path('api/reports/', include('reports.urls')),
 
     # السويغر والتوثيق
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

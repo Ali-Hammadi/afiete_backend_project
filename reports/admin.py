@@ -60,20 +60,31 @@ class UserReportAdmin(admin.ModelAdmin):
                 
         self.message_user(request, f"Successfully deactivated/suspended accounts for {success_count} user(s).", messages.SUCCESS)
 
-    @admin.action(description='Delete reported user account PERMANENTLY')
+    @admin.action(description='Deactivate reported user account')
     def delete_user_account(self, request, queryset):
+        """
+        يقوم بتعطيل الحساب بدلاً من حذفه لضمان سلامة البيانات 
+        والسجلات المرتبطة (مثل المواعيد والعمليات المالية).
+        """
         success_count = 0
         for report in queryset:
             user = report.reported_user
             if user:
-                user.delete()  # Removes the user record completely from the database
+                # التعطيل المنطقي: الحساب لا يزال موجوداً لكن لا يمكنه تسجيل الدخول
+                user.is_active = False  
+                user.save()
                 
-            report.action_taken = 'ACCOUNT_DELETED'
-            report.save()
-            success_count += 1
+                # تحديث التقرير ليعكس الإجراء المتخذ
+                report.action_taken = 'ACCOUNT_DELETED' # يمكنك الاحتفاظ بهذا الـ Choice أو تغيير الاسم
+                report.admin_notes = "User account deactivated (Soft Delete) by admin."
+                report.save()
+                success_count += 1
             
-        self.message_user(request, f"Permanently deleted accounts for {success_count} user(s) from the database.", messages.ERROR)
-
+        self.message_user(
+            request, 
+            f"Successfully deactivated {success_count} account(s). No data was removed from the database.", 
+            messages.SUCCESS
+        )
     @admin.action(description='Dismiss selected reports (No penalty)')
     def dismiss_report(self, request, queryset):
         queryset.update(action_taken='DISMISSED')
