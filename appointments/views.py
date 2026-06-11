@@ -1,29 +1,58 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
+from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
+
+from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import permissions
-from rest_framework.generics import ListAPIView, RetrieveAPIView, UpdateAPIView, CreateAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import ListAPIView, RetrieveAPIView, UpdateAPIView, CreateAPIView, ListCreateAPIView, RetrieveUpdateAPIView
 from rest_framework.pagination import PageNumberPagination
-
 from rest_framework.filters import OrderingFilter
-from django_filters.rest_framework import DjangoFilterBackend
-from .filters import AppointmentFilter
+from django.db.models import Sum
+from decimal import Decimal
+from rest_framework import generics, status, permissions
+from django.utils import timezone
+from django.db import transaction
+from assessments.models import AssessmentResult
+from assessments.utils import grant_doctor_access_to_assessment
+from users.permissions import IsPatient, IsDoctor
 
-from .serializers import (PricesSerializer,
-                          PaymentSerializer,
-                          AppointmentSerializer,
-                          AppointmentListSerializer,
-                          RetrieveAppointmentSerializer,
-                          RescheduleAppointmentSerializer,)
-from .models import SessionPrice, Appointment, Payment
+from .models import Appointment, SessionPrice, Payment, Review
+from .filters import AppointmentFilter
+from .serializers import (
+    PricesSerializer,
+    PaymentSerializer,
+    AppointmentSerializer,
+    AppointmentListSerializer,
+    RetrieveAppointmentSerializer,
+    RescheduleAppointmentSerializer,
+    PastAppointmentSerializer,
+    ReviewSerializer,
+    PatientUpdateNextSessionSerializer
+)
 from users.permissions import IsDoctor, IsPatient
 
-from django.shortcuts import get_object_or_404
-class SessionPricesViewSet(viewsets.ModelViewSet):
+class AppointmentPagination(PageNumberPagination):
+    page_size = 5
+
+
+# --- تعديل الأسعار: منع الحذف تماماً وتحويلها إلى Generics منيعة ---
+class SessionPricesListCreateView(ListCreateAPIView):
+    """Each doctor views and creates their own pricing schedules exclusively."""
     serializer_class = PricesSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return SessionPrice.objects.filter(doctor=self.request.user.doctor)
+
+    def perform_create(self, serializer):
+        serializer.save(doctor=self.request.user.doctor)
+
+
+class SessionPricesRetrieveUpdateView(RetrieveUpdateAPIView):
+    """Each doctor views details and updates their pricing schedules without delete permissions."""
+    serializer_class = PricesSerializer
+    permission_classes = [IsAuthenticated, IsDoctor]
     lookup_field = 'type'
 
     def get_queryset(self):
@@ -31,89 +60,107 @@ class SessionPricesViewSet(viewsets.ModelViewSet):
 
 
 class BookAppointmentView(APIView):
-    permission_classes = [IsAuthenticated]
+    """Allows patient to prepare an appointment request (Starts at 'pending')."""
+    permission_classes = [IsAuthenticated, IsPatient]
     serializer_class = AppointmentSerializer
+    
     def post(self, request):
         serializer = AppointmentSerializer(data=request.data, context={'request': request})
-        
         if serializer.is_valid():
-            serializer.save() # 
+            serializer.save() 
             return Response({
-                "message":"“Your reservation request has been submitted successfully",
+                "message": "Your reservation request has been submitted successfully.",
                 "data": serializer.data
             }, status=status.HTTP_201_CREATED)
-            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
 
+
 class PatientAppointmentListView(ListAPIView):
+    """Patients see only their own appointments."""
     serializer_class = AppointmentListSerializer
     permission_classes = [IsAuthenticated, IsPatient]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = AppointmentFilter
     ordering_fields = ['date']
-    pagination_class = PageNumberPagination
-    pagination_class.page_size = 5
+    pagination_class = AppointmentPagination
 
     def get_queryset(self):
         return Appointment.objects.filter(patient=self.request.user.patient).order_by('-date')
 
 
+class PatientPastAppointmentsListView(ListAPIView):
+    """Returns only past/inactive records belonging to the authenticated patient."""
+    serializer_class = PastAppointmentSerializer
+    permission_classes = [IsAuthenticated, IsPatient]
+    pagination_class = AppointmentPagination
+
+    def get_queryset(self):
+        return Appointment.objects.filter(
+            patient=self.request.user.patient,
+            status__in=['completed', 'cancelled', 'expired']
+        ).order_by('-date')
+
+
 class DoctorAppointmentListView(ListAPIView):
+    """Doctors see only appointments booked with them."""
     serializer_class = AppointmentListSerializer
     permission_classes = [IsAuthenticated, IsDoctor]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = AppointmentFilter
     ordering_fields = ['date']
-
-    pagination_class = PageNumberPagination
-    pagination_class.page_size = 5
+    pagination_class = AppointmentPagination
 
     def get_queryset(self):
         return Appointment.objects.filter(doctor=self.request.user.doctor).order_by('-date')
         
+
 class CancelAppointmentView(UpdateAPIView):
-    permission_classes = [IsAuthenticated]
-
+    # تعديل الصلاحية لتصبح حصراً للمريض لمنع الطبيب من استخدام الرابط نهائياً
+    permission_classes = [IsAuthenticated, IsPatient]
+    
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'patient'):
-            return Appointment.objects.filter(patient=user.patient)
-        elif hasattr(user, 'doctor'):
-            return Appointment.objects.filter(doctor=user.doctor)
-        return Appointment.objects.none()
-
+        # البحث محصور فقط بمواعيد المريض المسجل حالياً لضمان عزل البيانات الكامل
+        return Appointment.objects.filter(patient=self.request.user.patient)
+        
     def update(self, request, *args, **kwargs):
         appointment = self.get_object()
-        user = request.user
-
-        if appointment.status in ['cancelled', 'expired', 'completed']:
-            return Response(
-                {"error": "Cannot cancel this appointment."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if appointment.status == 'confirmed':
-            if hasattr(appointment, 'payment'):
-                appointment.payment.status = 'refunded'
-                appointment.payment.save()
-                appointment.cancelled_by = 'patient' if hasattr(user, 'patient') else 'doctor' 
-
+        
+        # منع إلغاء المواعيد المنتهية أو الملغاة بالفعل
+        if appointment.status in ['completed', 'expired', 'cancelled']:
+            return Response({"error": "You can't cancel ended or expired or canceled appointments."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # عملية الإلغاء وتوثيق الفاعل
         appointment.status = 'cancelled'
+        appointment.cancelled_by = str(request.user.username)
         appointment.save()
+        
+        # في حال وجود دفع مسبق، يتم إرجاعه تلقائياً مالياً في النظام
+        if hasattr(appointment, 'payment'):
+            payment = appointment.payment
+            payment.status = 'refunded'
+            payment.save()
+            
+        return Response({"message": "Appointment cancelled successfully.", "status": "cancelled"}, status=status.HTTP_200_OK)
 
-        return Response({"message": "Appointment cancelled successfully."})
+
 class RetrieveAppointmentAPIView(RetrieveAPIView): 
-    permission_classes = [IsAuthenticated, IsDoctor]
+    """Restricts profile views to explicitly assigned doctor or patient accounts."""
+    permission_classes = [IsAuthenticated]
     serializer_class = RetrieveAppointmentSerializer
-    lookup_field = 'pk'
+    
     def get_queryset(self):
-        return Appointment.objects.filter(
-            doctor = self.request.user.doctor
-        )
+        user = self.request.user
+        if hasattr(user, 'doctor'):
+            return Appointment.objects.filter(doctor=user.doctor)
+        elif hasattr(user, 'patient'):
+            return Appointment.objects.filter(patient=user.patient)
+        return Appointment.objects.none()
+
 
 class RescheduleAppointmentView(UpdateAPIView):
+    """Changes dates/times using fully nested schedule collision validators."""
     serializer_class = RescheduleAppointmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPatient]
 
     def get_queryset(self):
         return Appointment.objects.filter(patient=self.request.user.patient)
@@ -122,20 +169,57 @@ class RescheduleAppointmentView(UpdateAPIView):
         appointment = self.get_object()
         if appointment.status not in ['pending', 'confirmed']:
             return Response(
-                {"error": "Cannot reschedule this appointment."},
+                {"error": "Cannot reschedule an appointment in its current state."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        return super().update(request, *args, **kwargs)
-    
+        
+        response = super().update(request, *args, **kwargs)
+        appointment.status = 'confirmed'
+        appointment.save()
+        return response
+
+
+class CreateAppointmentReviewView(APIView):
+    """Restricts feedback generation until after the session is 'completed'."""
+    permission_classes = [IsAuthenticated, IsPatient]
+
+    def post(self, request, appointment_id):
+        appointment = get_object_or_404(Appointment, id=appointment_id, patient=request.user.patient)
+
+        if appointment.status != 'completed':
+            return Response(
+                {"error": "You cannot review a doctor before the appointment is completed."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if hasattr(appointment, 'review'):
+            return Response(
+                {"error": "You have already reviewed this appointment instance."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = ReviewSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(
+                appointment=appointment,
+                doctor=appointment.doctor,
+                patient=request.user.patient
+            )
+            return Response({"message": "Your review has been submitted successfully."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 class CreatePaymentView(CreateAPIView):
+    """Charges the patient based on live doctor tariff tables and activates bookings."""
     serializer_class = PaymentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPatient]
+
 
 class PaymentListView(ListAPIView):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination
-    pagination_class.page_size = 10
+    pagination_class = AppointmentPagination
+    
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, 'patient'):
@@ -143,3 +227,187 @@ class PaymentListView(ListAPIView):
         elif hasattr(user, 'doctor'):
             return Payment.objects.filter(appointment__doctor=user.doctor)
         return Payment.objects.none()
+
+
+class DoctorWalletView(APIView):
+    """واجهة برمجية ليعرف الطبيب عبر Flutter إجمالي أرباحه والمبالغ المعلقة والمستلمة"""
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        doctor = request.user.doctor
+        doctor_payments = Payment.objects.filter(appointment__doctor=doctor, status='completed')       
+        total_earnings = doctor_payments.aggregate(Sum('doctor_amount'))['doctor_amount__sum'] or Decimal('0.00')
+        transferred_amount = doctor_payments.filter(is_transferred_to_doctor=True).aggregate(Sum('doctor_amount'))['doctor_amount__sum'] or Decimal('0.00')
+        
+        pending_clearance = total_earnings - transferred_amount
+
+        return Response({
+            "total_earnings": total_earnings,          
+            "transferred_amount": transferred_amount,  
+            "pending_clearance": pending_clearance      
+        }, status=status.HTTP_200_OK)
+        
+# ==================== 1. جلب الجلسات الفائتة للمريض ====================
+class PatientMissedSessionsListView(ListAPIView):
+    """عرض قائمة الجلسات الفائتة التي تخلف عنها المريض الحالي"""
+    serializer_class = AppointmentListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def get_queryset(self):
+        return Appointment.objects.filter(
+            patient=self.request.user.patient,
+            status=Appointment.Status.Missed
+        ).order_by('-date')
+
+
+# ==================== 2. جلب الجلسات الفائتة للطبيب ====================
+class DoctorMissedSessionsListView(ListAPIView):
+    """عرض قائمة الجلسات الفائتة الخاصة بمراجعي الطبيب الحالي"""
+    serializer_class = AppointmentListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return Appointment.objects.filter(
+            doctor=self.request.user.doctor,
+            status=Appointment.Status.Missed
+        ).order_by('-date')
+
+
+# ==================== 3. استرداد الأموال (Refund) ====================
+class RefundAppointmentView(APIView):
+    """تحويل حالة الدفع للموعد الفائت إلى المسترد (refunded) وإلغاء الجلسة ماليًا"""
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def post(self, request, appointment_id):
+        appointment = get_object_or_404(
+            Appointment, 
+            id=appointment_id, 
+            patient=request.user.patient,
+            status=Appointment.Status.Missed
+        )
+        
+        payment = get_object_or_404(Payment, appointment=appointment)
+        
+        if payment.status == 'refunded':
+            return Response({"detail": "تمت عملية استرداد أموال هذه الجلسة مسبقاً."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if payment.status != 'completed':
+            return Response({"detail": "لا يمكن استرداد مبالغ لعمليات دفع غير مكتملة."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # تحويل الحالات برمجياً وحفظها بأمان
+        payment.status = 'refunded'
+        payment.save()
+        
+        appointment.status = Appointment.Status.Cancelled
+        appointment.cancelled_by = "Patient (Refunded)"
+        appointment.save()
+
+        return Response({
+            "message": "تم استرداد المبلغ بنجاح وتحديث المحفظة.",
+            "appointment_id": appointment.id,
+            "payment_status": payment.status
+        }, status=status.HTTP_200_OK)
+
+
+# ==================== 4. إعادة الجدولة (Reschedule) ====================
+class RescheduleAppointmentView(UpdateAPIView):
+    """إعادة جدولة الموعد (المؤكد أو الفائت) لتاريخ ووقت جديدين"""
+    queryset = Appointment.objects.all()
+    serializer_class = RescheduleAppointmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def get_object(self):
+        return get_object_or_404(Appointment, pk=self.kwargs.get('pk'), patient=self.request.user.patient)
+
+    def perform_update(self, serializer):
+        # عند إعادة الحجز بنجاح تعود حالة الموعد مؤكدة بالتاريخ الجديد مباشرة
+        serializer.save(status=Appointment.Status.Confirmed, updated_at=timezone.now())
+
+
+# ==================== 5. تحديث الكورس العلاجي بواسطة المريض ====================
+class PatientUpdateNextSessionView(UpdateAPIView):
+    """
+    واجهة مخصصة تمنح المريض (وليس الطبيب) الأحقية في تحديد ما إذا كان بحاجة
+    إلى جلسة قادمة (has_next_session = True/False) بعد انتهاء الجلسة أو تفويتها.
+    """
+    serializer_class = PatientUpdateNextSessionSerializer
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def get_object(self):
+        # التحقق من أن الموعد يخص المريض الحالي حصراً حمايةً للبيانات
+        return get_object_or_404(Appointment, pk=self.kwargs.get('pk'), patient=self.request.user.patient)
+    
+ # ==================== ➕ Smart Review & Treatment Course Logic (English Responses) ====================
+
+class SmartCreateAppointmentReviewView(APIView):
+    """
+    Smart review interface implementing business rules:
+    1. Prevents review unless the appointment status is completed.
+    2. Prevents text commentary if the treatment course is ongoing (rating stars only).
+    3. Flushes previous reviews by this patient for this doctor to show only the latest experience.
+    """
+    permission_classes = [IsAuthenticated, IsPatient]
+
+    def post(self, request, appointment_id):
+        appointment = get_object_or_404(Appointment, id=appointment_id, patient=request.user.patient)
+
+        # 1. Ensure the session is actually completed
+        if appointment.status != 'completed':
+            return Response(
+                {"error": "You cannot review the doctor before the session is fully completed."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Prevent reviewing the exact same appointment instance more than once
+        if hasattr(appointment, 'review'):
+            return Response(
+                {"error": "You have already reviewed this specific appointment."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = ReviewSerializer(data=request.data)
+        if serializer.is_valid():
+            comment = serializer.validated_data.get('comment')
+            
+            # 3. Treatment course rule: if an upcoming session exists (has_next_session=True), text comments are restricted
+            if appointment.has_next_session is True and comment:
+                return Response(
+                    {"error": "Since the treatment course is ongoing, you can only provide a star rating. Text commentary is restricted until the course finishes."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            with transaction.atomic():
+                # 4. Anti-duplication logic: delete any prior reviews from this patient for this doctor to keep only the latest experience
+                Review.objects.filter(patient=request.user.patient, doctor=appointment.doctor).delete()
+                
+                # Save the new review and bind it to the correct relational contexts
+                serializer.save(
+                    appointment=appointment,
+                    doctor=appointment.doctor,
+                    patient=request.user.patient
+                )
+                
+            return Response({"message": "Your smart review has been submitted successfully."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+class BookAppointmentView(CreateAPIView):
+    serializer_class = AppointmentSerializer
+    permission_classes = [IsAuthenticated, IsPatient]
+
+    def perform_create(self, serializer):
+        # Save the appointment first
+        appointment = serializer.save(patient=self.request.user.patient)
+        
+        # Check for the latest assessment result for this patient
+        latest_assessment = AssessmentResult.objects.filter(
+            patient=self.request.user.patient
+        ).order_by('-created_at').first()
+
+        # If found, share access with the new doctor
+        if latest_assessment:
+            grant_doctor_access_to_assessment(
+                doctor=appointment.doctor, 
+                assessment=latest_assessment
+            )

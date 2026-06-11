@@ -1,24 +1,46 @@
 from django.urls import path
+from .views import RefundAppointmentView, SmartCreateAppointmentReviewView
 from .views import (
-    BookAppointmentView, PatientAppointmentListView, DoctorAppointmentListView,
-    CancelAppointmentView, RetrieveAppointmentAPIView, RescheduleAppointmentView,
-    CreatePaymentView, PaymentListView
+    BookAppointmentView, 
+    PatientAppointmentListView, 
+    PatientPastAppointmentsListView,
+    DoctorAppointmentListView,
+    CancelAppointmentView, 
+    RetrieveAppointmentAPIView, 
+    RescheduleAppointmentView,
+    CreateAppointmentReviewView,
+    CreatePaymentView, 
+    PaymentListView,
+    DoctorWalletView,  
+    SessionPricesListCreateView,       
+    SessionPricesRetrieveUpdateView,
+    PatientMissedSessionsListView,
+    DoctorMissedSessionsListView,
+    PatientUpdateNextSessionView
 )
 
 urlpatterns = [
-    # --- منظور المريض (api/patient/appointments/) ---
+    # ==================== 🩺 Doctor Views ====================
+    path('dashboard/', DoctorAppointmentListView.as_view(), name='doctor-appointments'),
+    path('prices/', SessionPricesListCreateView.as_view(), name='doctor-prices-list'),
+    path('prices/<str:type>/', SessionPricesRetrieveUpdateView.as_view(), name='doctor-prices-detail'),
+    path('doctor/wallet/', DoctorWalletView.as_view(), name='doctor-wallet'),
+    path('doctor/missed/', DoctorMissedSessionsListView.as_view(), name='doctor-missed-sessions'),
+
+    # ==================== 👥 Patient Views ====================
     path('book/', BookAppointmentView.as_view(), name='book-appointment'),
     path('my-list/', PatientAppointmentListView.as_view(), name='patient-appointments'),
-    
-    # المدفوعات التابعة للمريض
+    path('history/', PatientPastAppointmentsListView.as_view(), name='patient-appointments-history'),   
+    path('patient/missed/', PatientMissedSessionsListView.as_view(), name='patient-missed-sessions'),
     path('payments/create/', CreatePaymentView.as_view(), name='payment-create'),
-    path('payments/history/', PaymentListView.as_view(), name='payment-list'),
+    path('<int:appointment_id>/smart-review/', SmartCreateAppointmentReviewView.as_view(), name='smart-review-appointment'),
+    path('<int:appointment_id>/refund/', RefundAppointmentView.as_view(), name='refund-appointment'),
 
-    # --- منظور الطبيب (api/doctor/appointments/) ---
-    path('dashboard/', DoctorAppointmentListView.as_view(), name='doctor-appointments'),
-
-    # --- مشتركة حسب المعرّف (ID) والصلاحية تتحكم بالوصول ---
+    # ==================== 🔒 Shared / Specific Actions ====================
     path('<int:pk>/', RetrieveAppointmentAPIView.as_view(), name='appointment-detail'),
     path('<int:pk>/cancel/', CancelAppointmentView.as_view(), name='cancel-appointment'),
     path('<int:pk>/reschedule/', RescheduleAppointmentView.as_view(), name='reschedule-appointment'),
+    path('<int:pk>/next-session/', PatientUpdateNextSessionView.as_view(), name='patient-update-next-session'),
+    path('payments/history/', PaymentListView.as_view(), name='payment-list'),
+    
 ]

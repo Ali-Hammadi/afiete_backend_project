@@ -17,4 +17,3 @@ class AppointmentFilter(django_filters.FilterSet):
         fields = ['status', 'date_from', 'date_to', 'date']
 
 
-    # /api/appointments/my-appointments/?status=&date_from=&date_to=&date=2026-6-8

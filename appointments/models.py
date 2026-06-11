@@ -1,102 +1,85 @@
 from django.db import models
 from django.utils import timezone
-from users.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.contrib.auth import get_user_model
 from patients.models import Patient
 from doctors.models import Doctor
-from datetime import datetime
-class Appointment(models.Model):
-    class Status (models.TextChoices):
-        Pending = 'pending'      # تم الحجز، بانتظار الدفع
-        Confirmed = 'confirmed'  # تم الدفع
-        Cancelled = 'cancelled'  # ملغي
-        Completed = 'completed'  # انتهى الموعد
-        Expired = 'expired'      # انتهى وقته بدون دفع
-        
-    class Type(models.TextChoices):
-        Video = 'video' , 'Video'
-        Audio = 'audio' , 'Audio'
-        TextMessage = 'text_message' , 'Text Message'
 
-    type = models.CharField(max_length=100 , choices=Type.choices , default=Type.TextMessage)
-    patient = models.ForeignKey(Patient , on_delete=models.CASCADE)
-    doctor = models.ForeignKey(Doctor , on_delete=models.CASCADE)
+User = get_user_model()
+
+class Appointment(models.Model):
+    class Status(models.TextChoices):
+        Pending = 'pending', 'Pending'          # محجوز بانتظار الدفع
+        Confirmed = 'confirmed', 'Confirmed'    # مدفوع ومؤكد
+        Cancelled = 'cancelled', 'Cancelled'    # ملغي
+        Completed = 'completed', 'Completed'    # منتهي
+        Expired = 'expired', 'Expired'          # انتهت صلاحية نافذة الحجز دون دفع
+        Missed = 'missed', 'Missed'            # ➕ جلسة فائتة (لم يحضرها المريض)
+
+    class Type(models.TextChoices):
+        Video = 'video', 'Video'
+        Audio = 'audio', 'Audio'
+        TextMessage = 'text_message', 'Text Message'
+
+    type = models.CharField(max_length=100, choices=Type.choices, default=Type.TextMessage)
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='appointments')
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='appointments')
     date = models.DateTimeField()
-    duration = models.IntegerField() # in minutes
-    status = models.CharField(max_length=100 , choices= Status.choices , default=Status.Pending)
+    duration = models.IntegerField()  # بالدقائق
+    status = models.CharField(max_length=100, choices=Status.choices, default=Status.Pending)
+    
+    # ➕ متغير الكورس العلاجي: المريض هو من يحدد استمرارية الجلسات القادمة أو إغلاق الخطة العلاجية
+    has_next_session = models.BooleanField(default=True, null=True, blank=True)
+    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    cancelled_by = models.CharField(null=True, blank=True, max_length=20)
+    cancelled_by = models.CharField(max_length=100, null=True, blank=True)
+
     def __str__(self):
-        return f"Appointment between {self.patient} and {self.doctor} on {self.date} and id = {self.pk}"
-    
-    @property
-    def end_time(self):
-        return self.date + timezone.timedelta(minutes=self.duration)
+        return f"Mtg {self.pk} - {self.patient.user.username} with {self.doctor.user.username} ({self.status})"
 
 
 class SessionPrice(models.Model):
-    doctor = models.ForeignKey(
-        Doctor,
-        on_delete=models.CASCADE,
-        related_name='session_prices',
-    )
-    class Type(models.TextChoices):
-        Video = 'video' , 'Video'
-        Audio = 'audio' , 'Audio'
-        TextMessage = 'text_message' , 'Text Message'
-    duration = models.IntegerField(default=30) # in minutes
-    type = models.CharField(max_length=100 , choices= Type.choices)
-    price = models.DecimalField(max_digits=10 , decimal_places=2)
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='session_prices')
+    duration = models.IntegerField(default=30)
+    type = models.CharField(max_length=100, choices=Appointment.Type.choices)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['doctor', 'type'],
-                name='unique_doctor_session_type'
-            )
-        ]
-# create the perscription then add the medications to it in the same request 
-class Prescription(models.Model):
-    patient = models.ForeignKey(Patient , on_delete=models.CASCADE)
-    doctor = models.ForeignKey(Doctor , on_delete=models.CASCADE)
-    appointment = models.OneToOneField(Appointment , on_delete=models.CASCADE , blank=True)
-    date = models.DateTimeField(default=timezone.now)
-    notes = models.TextField(blank=True , null=True)
-    # يمكن أن يكون هناك أكثر من دواء في نفس الوصفة الطبية
-
-class Medication(models.Model):
-    prescription = models.ForeignKey(Prescription , on_delete=models.CASCADE , related_name='medications')
-
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True , null=True)
-    side_effects = models.TextField(blank=True , null=True)
-
-    # Usage instructions (optional)
-    dosage_amount = models.IntegerField(blank=True , null=True)
-    dosage_duration = models.IntegerField(blank=True , null=True) # in days
-    dosage_interval = models.IntegerField(blank=True , null=True) # in hours
+        unique_together = ('doctor', 'type')
 
     def __str__(self):
-        return self.name
+        return f"{self.type} - {self.price} MRU"
+
 
 class Payment(models.Model):
     class Status(models.TextChoices):
         Pending = 'pending', 'Pending'
         Completed = 'completed', 'Completed'
-        Rejected = 'rejected', 'Rejected'
-        Refunded = 'refunded', 'Refunded'
-        
-    appointment = models.OneToOneField(
-        Appointment,
-        on_delete=models.CASCADE,
-        related_name='payment'
-        )
-    amount = models.DecimalField(max_digits=10 , decimal_places=2)
+        Refunded = 'refunded', 'Refunded'  # حالة الاسترداد المالي
+
+    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='payment')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    admin_commission = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    doctor_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    is_transferred_to_doctor = models.BooleanField(default=False)
     date = models.DateTimeField(default=timezone.now)
     method = models.CharField(max_length=100)
-
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.Pending)
-    transaction_id = models.CharField(max_length=100 , blank=True , null=True)
-    viewed_by = models.ManyToManyField(User, blank=True, related_name='viewed_payments')
-
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Payment {self.amount} for Appt {self.appointment.pk} ({self.status})"
+
+
+class Review(models.Model):
+    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='review')
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='reviews')
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    rating = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Review {self.rating} for {self.doctor.user.username}"
