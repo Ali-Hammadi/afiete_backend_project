@@ -14,6 +14,10 @@ from pathlib import Path
 from os import path
 from datetime import timedelta
 
+from narwhals import Decimal
+
+from appointments.models import Payment
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -183,7 +187,7 @@ EMAIL_USE_TLS = True
 
 EMAIL_HOST_USER = 'your@gmail.com'
 EMAIL_HOST_PASSWORD = 'your_app_password'
-
+SUPPORT_EMAIL = 'your@gmail.com'
 DEFAULT_FROM_EMAIL = 'your@gmail.com'
 
 
@@ -195,3 +199,7 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=3, minute=0),  # كل يوم 3 الصبح
     },
 }
+
+
+COMMISSION_RATE = Decimal('0.20')
+Payment.admin_commission = Payment.amount * COMMISSION_RATE

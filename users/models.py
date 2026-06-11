@@ -29,6 +29,7 @@ class User(AbstractUser):
     is_verified =   models.BooleanField(default=False) # to check if the user has verified his email or not
     # otp_code = models.CharField(max_length=6 , blank=True , null=True) # to store the OTP code for email verification
     can_reset_password = models.BooleanField(default=False)
+    is_funds_frozen = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 

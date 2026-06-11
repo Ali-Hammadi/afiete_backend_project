@@ -1,7 +1,11 @@
 from django.contrib import admin
 from django.db import transaction
 from decimal import Decimal
+
+from project4th.settings import COMMISSION_RATE
 from .models import Appointment, Payment
+from django.contrib.admin.views.decorators import staff_member_required
+
 
 @admin.action(description='Approve Selected Payments')
 @transaction.atomic
@@ -16,8 +20,7 @@ def approve_payment(modeladmin, request, queryset):
         if payment.status == 'pending':
             payment.status = 'completed'
             
-            # Manually calculate financial split upon approval (e.g., 20% admin commission)
-            payment.admin_commission = payment.amount * Decimal('0.20')
+            payment.admin_commission = payment.amount * Decimal(COMMISSION_RATE)
             payment.doctor_amount = payment.amount - payment.admin_commission
             payment.save()
             

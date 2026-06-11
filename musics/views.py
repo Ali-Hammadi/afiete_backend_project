@@ -1,13 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
+permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
+from users.permissions import IsAccountActiveAndUnfrozen
 from .models import MusicEntity, BreathingExerciseEntity, UserRelaxProfile
 from .serializers import MusicEntitySerializer, BreathingExerciseEntitySerializer
 from .recommendation import get_recommended_tracks
 
 class LastFeelingView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     def get(self, request):
         profile, _ = UserRelaxProfile.objects.get_or_create(user=request.user)
         return Response({"last_selected_feeling": profile.last_selected_feeling})
@@ -21,7 +22,7 @@ class LastFeelingView(APIView):
 
 
 class RecommendedTracksView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     def get(self, request):
         feeling = request.query_params.get("feeling")
@@ -39,7 +40,7 @@ class RecommendedTracksView(APIView):
 
 
 class BreathingExerciseListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     def get(self, request):
         exercises = BreathingExerciseEntity.objects.all()

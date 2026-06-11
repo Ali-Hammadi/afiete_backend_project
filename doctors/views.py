@@ -14,7 +14,7 @@ from .models import Doctor, Education, Schedule, SubSpecialization
 from django.db.models import Max
 # استيراد الموديلات من تطبيق الـ appointments (لأغراض الفلترة)
 from appointments.models import SessionPrice
-
+from users.permissions import IsAccountActiveAndUnfrozen
 # استيراد السيريالايزرز
 from .serializers import (
     DoctorRegisterSerializer,
@@ -53,8 +53,7 @@ class DoctorRegisterView(generics.CreateAPIView):
 class DoctorProfileView(generics.RetrieveUpdateAPIView):
     queryset = Doctor.objects.all()
     serializer_class = DoctorProfileSerialzer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
-
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     def get_object(self):
         return self.request.user.doctor
         
@@ -78,7 +77,7 @@ class DoctorProfileView(generics.RetrieveUpdateAPIView):
 # --- كلاس إدارة تعليم الطبيب ---
 class DoctorEducationView(generics.CreateAPIView):
     serializer_class = DoctorEducationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
     def get_queryset(self):
         return Education.objects.filter(doctor=self.request.user.doctor)
@@ -97,7 +96,7 @@ class DoctorEducationView(generics.CreateAPIView):
 
 
 class ScheduleViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     serializer_class = ScheduleSerializer
 
     def get_object(self):
@@ -116,7 +115,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
 
 class AvailableSlotsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     @extend_schema(
         summary="Get Doctor Available Slots by Date",
@@ -143,7 +142,7 @@ class AvailableSlotsView(APIView):
 class DoctorPublicProfileView(generics.RetrieveAPIView): 
     queryset = Doctor.objects.all()
     serializer_class = DoctorPublicProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     lookup_field = 'doctor_username'
 
     def get_object(self):
@@ -155,7 +154,7 @@ class DoctorPublicProfileView(generics.RetrieveAPIView):
 class SubSpecializationListView(generics.ListAPIView):
     queryset = SubSpecialization.objects.all()
     serializer_class = SubSpecializationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
 
 
 class DoctorListView(generics.ListAPIView):
@@ -166,7 +165,7 @@ class DoctorListView(generics.ListAPIView):
     3. قاعدة الـ 7 أيام: قام بتحديث أو تحديد مواعيده خلال الـ 7 أيام الماضية حصراً.
     """
     serializer_class = DoctorPublicProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['specialties']
 

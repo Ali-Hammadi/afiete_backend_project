@@ -1,5 +1,5 @@
 # Path: articles/views.py
-
+from users.permissions import IsAccountActiveAndUnfrozen
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -21,7 +21,7 @@ from .recommender import recommend_articles
 from .pagination import ArticlePagination
 
 class ArticleCreateAPIView(generics.CreateAPIView):
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     serializer_class = ArticaleCraeteSerializer
 
     def create(self, request, *args, **kwargs):
@@ -100,7 +100,7 @@ class ArticleUpdateAPIView(generics.UpdateAPIView):
 
 class ReactionGenericAPIView(generics.GenericAPIView):
     # 🔥 التحصين الصارم: يسمح فقط للمستخدم المسجل والـ Patient بالتفاعل
-    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    permission_classes = [permissions.IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     serializer_class = ReactionSerializer
 
     def post(self, request, article_id):
@@ -134,7 +134,7 @@ class ReactionGenericAPIView(generics.GenericAPIView):
 
 class DeleteArticleGenericAPIView(generics.GenericAPIView):
     serializer_class = DeleteArticleSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
     def delete(self, request, article_id):
         article = get_object_or_404(Article, id=article_id)

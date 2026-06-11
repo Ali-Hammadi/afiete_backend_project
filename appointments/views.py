@@ -1,8 +1,8 @@
 from datetime import timedelta
-
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
-
+from users.permissions import IsAccountActiveAndUnfrozen
 from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -62,7 +62,7 @@ class SessionPricesRetrieveUpdateView(RetrieveUpdateAPIView):
 
 class BookAppointmentView(APIView):
     """Allows patient to prepare an appointment request (Starts at 'pending')."""
-    permission_classes = [IsAuthenticated, IsPatient]
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     serializer_class = AppointmentSerializer
     
     def post(self, request):
@@ -117,7 +117,7 @@ class DoctorAppointmentListView(ListAPIView):
 
 class CancelAppointmentView(UpdateAPIView):
     # تعديل الصلاحية لتصبح حصراً للمريض لمنع الطبيب من استخدام الرابط نهائياً
-    permission_classes = [IsAuthenticated, IsPatient]
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     
     def get_queryset(self):
         # البحث محصور فقط بمواعيد المريض المسجل حالياً لضمان عزل البيانات الكامل
@@ -203,7 +203,7 @@ class PaymentListView(ListAPIView):
 
 class DoctorWalletView(APIView):
     """واجهة برمجية ليعرف الطبيب عبر Flutter إجمالي أرباحه والمبالغ المعلقة والمستلمة"""
-    permission_classes = [IsAuthenticated, IsDoctor]
+    permission_classes = [IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
     def get(self, request):
         doctor = request.user.doctor
@@ -248,7 +248,7 @@ class DoctorMissedSessionsListView(ListAPIView):
 # ==================== 3. استرداد الأموال (Refund) ====================
 class RefundAppointmentView(APIView):
     """تحويل حالة الدفع للموعد الفائت إلى المسترد (refunded) وإلغاء الجلسة ماليًا"""
-    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    permission_classes = [permissions.IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
 
     def post(self, request, appointment_id):
         appointment = get_object_or_404(
@@ -330,7 +330,8 @@ class BookAppointmentView(CreateAPIView):
                 doctor=appointment.doctor, 
                 assessment=latest_assessment
             )
-            
+
+@staff_member_required         
 def financial_dashboard(request):
     now = timezone.now()
     periods = {

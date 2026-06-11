@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from .models import User, Otp
+from .permissions import IsAccountActiveAndUnfrozen
 from .serializers import ( UserLoginSerializer,
                            ResendOtpSerializer,
                            VerifyOtpSerializer,
@@ -100,7 +101,7 @@ class LogoutView(APIView):
 
 
 class PasswordResetView(generics.UpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = PasswordResetSerializer
 
     def get_object(self):
@@ -115,7 +116,7 @@ class PasswordResetView(generics.UpdateAPIView):
 
 class EmailResetView(generics.UpdateAPIView):
     queryset = User.objects.all()   
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = EmailResetSerializer
     def update(self,request):
         serializer = self.get_serializer(self.get_object(),data=request.data)
@@ -176,7 +177,7 @@ class ResetPasswordView(generics.GenericAPIView):
         )
 
 class DeactivateAccountView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = DeactivateUserSerializer
     def delete(self, request):
         # validation 

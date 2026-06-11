@@ -13,14 +13,14 @@ from doctors.models import Schedule
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from appointments.serializers import AppointmentSerializer
-
+from users.permissions import IsAccountActiveAndUnfrozen
 class ServeyFormView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ServeyFormSerializer
     queryset = QuestionGroup.objects.prefetch_related('questions__options').all()  
 
 class SubmitAnswerView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated, IsPatient]
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     serializer_class = SubmitAnswerSerializer 
     queryset = UserAnswer.objects.all() 
     def create(self, request, *args, **kwargs):
@@ -45,7 +45,7 @@ class PatientScoresView(APIView):
 # doctors/views.py
 
 class RecommendDoctorsView(APIView):
-    permission_classes = [IsAuthenticated, IsPatient]
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     def get(self, request):
         patient     = request.user.patient
         recommended = recommend_doctors(patient)

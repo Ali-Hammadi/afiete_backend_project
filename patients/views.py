@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import generics
 from .serializers import PatientRegisterSerializer , PatientProfileSerializer , GoogleAuthSerializer
 from rest_framework import permissions
-from users.permissions import IsPatient, IsDoctor
+from users.permissions import IsAccountActiveAndUnfrozen, IsPatient, IsDoctor
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from django.conf import settings
 from django.db import transaction
 from rest_framework import status
-
+from users.permissions import IsAccountActiveAndUnfrozen
 import uuid 
 
 class PatientRegisterView(generics.CreateAPIView):
@@ -26,8 +26,7 @@ class PatientRegisterView(generics.CreateAPIView):
 class PatientProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = PatientProfileSerializer
     queryset = Patient.objects.all()
-    permission_classes = [permissions.IsAuthenticated, IsPatient]  # Add appropriate permissions here 
-
+    permission_classes = [permissions.IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     def get_object(self):
         return self.request.user.patient
 
@@ -71,8 +70,8 @@ class GoogleAuthView(APIView):
 class DoctorRetrievePatientView(generics.RetrieveAPIView):
     queryset = Patient.objects.all()
     serializer_class = PatientProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
-
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
+    
     def get_object(self):
         patient = super().get_object()
         

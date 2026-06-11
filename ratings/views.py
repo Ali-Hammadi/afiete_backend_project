@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-
+from users.permissions import IsAccountActiveAndUnfrozen
 from .serializers import RatingSerializer, RatingReadSerializer
 from .models import Rating
 from .pagination import RatingPagination
@@ -20,7 +20,7 @@ class RatingCreateView(APIView):
     2. تمنع التعليق النصي (comment) إذا كان الكورس العلاجي مستمراً (has_next_session=True).
     3. تحذف أي تقييمات سابقة للمريض مع هذا الطبيب لتبقي فقط على التقييم الأحدث تزامناً.
     """
-    permission_classes = [IsAuthenticated, IsPatient]
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
 
     def post(self, request, appointment_id):
         # جلب الموعد والتأكد من أنه يخص المريض الحالي لضمان عزل وأمان البيانات
@@ -72,7 +72,7 @@ class RatingListView(generics.ListAPIView):
     """عرض مراجعات الطبيب مع دعم التقسيم (Pagination)"""
     serializer_class = RatingReadSerializer
     pagination_class = RatingPagination
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     def get_queryset(self):
         doctor_username = self.kwargs.get('doctor_username')
