@@ -28,6 +28,11 @@ class Appointment(models.Model):
         CHAT = 'chat', 'Chat'       # دردشة
         VOICE = 'voice', 'Voice'     # صوت
         VIDEO = 'video', 'Video'     # فيديو
+    
+    
+
+
+
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='appointments')
     doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='appointments')
@@ -35,6 +40,7 @@ class Appointment(models.Model):
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     type = models.CharField(max_length=20, choices=Type.choices, default=Type.CHAT)
     date = models.DateTimeField()
+    has_next_session = models.BooleanField(default=False) 
 
     def __str__(self):
         return f"Appointment {self.id} - {self.status}"
