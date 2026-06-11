@@ -212,24 +212,50 @@ class PaymentListView(ListAPIView):
         return Payment.objects.none()
 
 
+
 class DoctorWalletView(APIView):
-    """واجهة برمجية ليعرف الطبيب عبر Flutter إجمالي أرباحه والمبالغ المعلقة والمستلمة"""
+    """
+    API endpoint to retrieve the doctor's earnings,
+    transferred amounts, and pending clearance.
+    """
     permission_classes = [IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
     def get(self, request):
+        # Defensive check to ensure the user has a doctor profile
+        if not hasattr(request.user, 'doctor'):
+            return Response(
+                {"detail": "Doctor profile not found for this user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         doctor = request.user.doctor
-        doctor_payments = Payment.objects.filter(appointment__doctor=doctor, status='completed')       
-        total_earnings = doctor_payments.aggregate(Sum('doctor_amount'))['doctor_amount__sum'] or Decimal('0.00')
-        transferred_amount = doctor_payments.filter(is_transferred_to_doctor=True).aggregate(Sum('doctor_amount'))['doctor_amount__sum'] or Decimal('0.00')
         
+        # Filter payments for the current doctor with 'completed' status
+        doctor_payments = Payment.objects.filter(
+            appointment__doctor=doctor, 
+            status='completed'
+        )
+        
+        # Calculate totals using aggregation
+        total_earnings = doctor_payments.aggregate(
+            total=Sum('doctor_amount')
+        )['total'] or Decimal('0.00')
+        
+        transferred_amount = doctor_payments.filter(
+            is_transferred_to_doctor=True
+        ).aggregate(
+            total=Sum('doctor_amount')
+        )['total'] or Decimal('0.00')
+        
+        # Calculate pending amount
         pending_clearance = total_earnings - transferred_amount
 
         return Response({
             "total_earnings": total_earnings,          
             "transferred_amount": transferred_amount,  
-            "pending_clearance": pending_clearance      
+            "pending_clearance": pending_clearance     
         }, status=status.HTTP_200_OK)
-        
+           
 # ==================== 1. جلب الجلسات الفائتة للمريض ====================
 class PatientMissedSessionsListView(ListAPIView):
     """عرض قائمة الجلسات الفائتة التي تخلف عنها المريض الحالي"""
