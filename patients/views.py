@@ -12,7 +12,9 @@ from django.conf import settings
 from django.db import transaction
 from rest_framework import status
 from users.permissions import IsAccountActiveAndUnfrozen
-import uuid 
+import uuid
+from rest_framework.exceptions import PermissionDenied
+
 
 class PatientRegisterView(generics.CreateAPIView):
     serializer_class = PatientRegisterSerializer
@@ -74,12 +76,19 @@ class DoctorRetrievePatientView(generics.RetrieveAPIView):
     
     def get_object(self):
         patient = super().get_object()
-        
         doctor = self.request.user.doctor
         
-        appointment_exists = Appointment.objects.filter(doctor=doctor, patient=patient).exists()
+        # 1. التحقق: هل توجد جلسة "قادمة" أو "نشطة" فقط؟
+        # إذا كان المريض قد أنهى آخر جلسة واختار عدم وجود جلسة قادمة (has_next_session=False)
+        # فهذا يعني أن الطبيب فقد صلاحية الوصول.
+        active_appointment = Appointment.objects.filter(
+            doctor=doctor, 
+            patient=patient,
+            status__in=['scheduled', 'confirmed'], # الجلسات التي لم تنتهِ بعد
+            has_next_session=True                 # التأكد من رغبة المريض بالاستمرار
+        ).exists()
         
-        if not appointment_exists:
-            raise PermissionDenied("Access denied: No appointment found between this doctor and patient.")
+        if not active_appointment:
+            raise PermissionDenied("Access denied: You have no active ongoing sessions with this patient.")
             
         return patient

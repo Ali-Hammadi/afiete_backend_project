@@ -14,6 +14,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from appointments.serializers import AppointmentSerializer
 from users.permissions import IsAccountActiveAndUnfrozen
+from musics.views import RecommendedTracksView
+
 class ServeyFormView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ServeyFormSerializer
@@ -57,7 +59,7 @@ class RecommendDoctorsView(APIView):
         
         return paginator.get_paginated_response(page)
 
-class RescheduleAppointmentView(APIView):
+
     def post(self, request, appointment_id):
         appointment = get_object_or_404(Appointment, id=appointment_id, patient=request.user.patient)
         

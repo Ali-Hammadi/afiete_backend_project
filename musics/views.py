@@ -1,7 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
 from users.permissions import IsAccountActiveAndUnfrozen
 from .models import MusicEntity, BreathingExerciseEntity, UserRelaxProfile
 from .serializers import MusicEntitySerializer, BreathingExerciseEntitySerializer

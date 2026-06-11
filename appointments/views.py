@@ -2,6 +2,8 @@ from datetime import timedelta
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
+from doctors.models import Schedule
+from doctors.models import Schedule
 from users.permissions import IsAccountActiveAndUnfrozen
 from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
@@ -60,21 +62,43 @@ class SessionPricesRetrieveUpdateView(RetrieveUpdateAPIView):
         return SessionPrice.objects.filter(doctor=self.request.user.doctor)
 
 
-class BookAppointmentView(APIView):
-    """Allows patient to prepare an appointment request (Starts at 'pending')."""
+class BookAppointmentView(generics.CreateAPIView):
+    """
+    الدمج المنطقي: يجمع بين الصلاحيات الصارمة للمريض، الاستجابة المخصصة للفلاتر،
+    وربط المريض تلقائياً مع مشاركة آخر تقييم نفسي له مع طبيبه الجديد فور الحجز.
+    """
     permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     serializer_class = AppointmentSerializer
-    
-    def post(self, request):
-        serializer = AppointmentSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            serializer.save() 
-            return Response({
-                "message": "Your reservation request has been submitted successfully.",
-                "data": serializer.data
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
 
+    def create(self, request, *args, **kwargs):
+        # التحقق من البيانات والتحقق من صحتها وتمرير الـ request في الـ context
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        # استدعاء دالة الحفظ والمنطق الذكي
+        self.perform_create(serializer)
+        
+        # إرجاع الاستجابة المخصصة المتفق عليها للواجهة الأمامية
+        return Response({
+            "message": "Your reservation request has been submitted successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def perform_create(self, serializer):
+        # 1. حفظ الموعد وربطه بحساب المريض المسجل حالياً في النظام تلقائياً
+        appointment = serializer.save(patient=self.request.user.patient)
+        
+        # 2. جلب آخر نتيجة تقييم نفسي (Assessment) قام بها هذا المريض
+        latest_assessment = AssessmentResult.objects.filter(
+            patient=self.request.user.patient
+        ).order_by('-created_at').first()
+
+        # 3. إذا وُجد تقييم، يتم منح الطبيب الجديد صلاحية الوصول إليه برمجياً فوراً
+        if latest_assessment:
+            grant_doctor_access_to_assessment(
+                doctor=appointment.doctor, 
+                assessment=latest_assessment
+            )
 
 class PatientAppointmentListView(ListAPIView):
     """Patients see only their own appointments."""
@@ -156,29 +180,6 @@ class RetrieveAppointmentAPIView(RetrieveAPIView):
         elif hasattr(user, 'patient'):
             return Appointment.objects.filter(patient=user.patient)
         return Appointment.objects.none()
-
-
-class RescheduleAppointmentView(UpdateAPIView):
-    """Changes dates/times using fully nested schedule collision validators."""
-    serializer_class = RescheduleAppointmentSerializer
-    permission_classes = [IsAuthenticated, IsPatient]
-
-    def get_queryset(self):
-        return Appointment.objects.filter(patient=self.request.user.patient)
-
-    def update(self, request, *args, **kwargs):
-        appointment = self.get_object()
-        if appointment.status not in ['pending', 'confirmed']:
-            return Response(
-                {"error": "Cannot reschedule an appointment in its current state."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        response = super().update(request, *args, **kwargs)
-        appointment.status = 'confirmed'
-        appointment.save()
-        return response
-
 
 
 class CreatePaymentView(CreateAPIView):
@@ -281,20 +282,48 @@ class RefundAppointmentView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ==================== 4. إعادة الجدولة (Reschedule) ====================
-class RescheduleAppointmentView(UpdateAPIView):
-    """إعادة جدولة الموعد (المؤكد أو الفائت) لتاريخ ووقت جديدين"""
-    queryset = Appointment.objects.all()
-    serializer_class = RescheduleAppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsPatient]
+class RescheduleAppointmentView(APIView):
+    # تم إضافة الصلاحيات الضرورية
+    permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
 
-    def get_object(self):
-        return get_object_or_404(Appointment, pk=self.kwargs.get('pk'), patient=self.request.user.patient)
+    def post(self, request, pk): # تم تغيير appointment_id إلى pk لتتطابق مع urls.py
+        # جلب الموعد والتأكد من أنه يخص المريض الحالي
+        appointment = get_object_or_404(Appointment, id=pk, patient=request.user.patient)
+        
+        new_date = request.data.get('new_date')
+        new_time_slot_id = request.data.get('new_time_slot_id')
+        new_appointment_type = request.data.get('appointment_type') 
 
-    def perform_update(self, serializer):
-        # عند إعادة الحجز بنجاح تعود حالة الموعد مؤكدة بالتاريخ الجديد مباشرة
-        serializer.save(status=Appointment.Status.Confirmed, updated_at=timezone.now())
+        # التحقق من توفر الموعد الجديد
+        new_slot = get_object_or_404(Schedule, id=new_time_slot_id, doctor=appointment.doctor, date=new_date)
+        if new_slot.is_booked:
+            return Response(
+                {"error": "The new appointment slot is already booked."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        # تحرير الموعد القديم
+        if appointment.time_slot:
+            old_slot = appointment.time_slot
+            old_slot.is_booked = False
+            old_slot.save()
+
+        # حجز الموعد الجديد
+        new_slot.is_booked = True
+        new_slot.save()
+
+        # تحديث بيانات الحجز
+        appointment.date = new_date
+        appointment.time_slot = new_slot
+        appointment.appointment_type = new_appointment_type
+        appointment.status = 'scheduled' 
+        appointment.save()
+
+        serializer = AppointmentSerializer(appointment)
+        return Response({
+            "message": "The appointment has been rescheduled successfully.",
+            "appointment": serializer.data
+        }, status=status.HTTP_200_OK)
 
 # ==================== 5. تحديث الكورس العلاجي بواسطة المريض ====================
 class PatientUpdateNextSessionView(UpdateAPIView):
@@ -310,26 +339,6 @@ class PatientUpdateNextSessionView(UpdateAPIView):
         return get_object_or_404(Appointment, pk=self.kwargs.get('pk'), patient=self.request.user.patient)
     
  # ==================== ➕ Smart Review & Treatment Course Logic (English Responses) ====================
-
-class BookAppointmentView(CreateAPIView):
-    serializer_class = AppointmentSerializer
-    permission_classes = [IsAuthenticated, IsPatient]
-
-    def perform_create(self, serializer):
-        # Save the appointment first
-        appointment = serializer.save(patient=self.request.user.patient)
-        
-        # Check for the latest assessment result for this patient
-        latest_assessment = AssessmentResult.objects.filter(
-            patient=self.request.user.patient
-        ).order_by('-created_at').first()
-
-        # If found, share access with the new doctor
-        if latest_assessment:
-            grant_doctor_access_to_assessment(
-                doctor=appointment.doctor, 
-                assessment=latest_assessment
-            )
 
 @staff_member_required         
 def financial_dashboard(request):
@@ -351,3 +360,4 @@ def financial_dashboard(request):
         }
 
     return render(request, 'admin/financial_dashboard.html', {'stats': stats})
+

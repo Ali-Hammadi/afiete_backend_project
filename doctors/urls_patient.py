@@ -1,9 +1,5 @@
-
 from django.urls import path
-from .views import (
-    DoctorListView, SubSpecializationListView,
-    AvailableSlotsView, DoctorPublicProfileView
-)
+from .views import DoctorListView, SubSpecializationListView, AvailableSlotsView, DoctorPublicProfileView
 
 urlpatterns = [
     path('', DoctorListView.as_view(), name='doctor-list'),

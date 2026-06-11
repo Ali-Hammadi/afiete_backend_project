@@ -13,25 +13,26 @@ urlpatterns = [
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
-    # 2. بوابة تطبيق المريض بالكامل (Patient App Gateway)
+    # 2. بوابة المريض (Patient App Gateway)
     path('api/patient/', include([
-        path('', include('patients.urls')),                  # حساب المريض نفسه
-        path('doctors/', include('doctors.urls_patient')),   # رؤية الأطباء والتخصصات من منظور المريض (تم التعديل هنا)
-        path('appointments/', include('appointments.urls')), # حجوزات المريض ومدفوعاته
-        path('articles/', include('articles.urls')),         # تصفح المقالات والتفاعل معها
-        path('assessment/', include('assessments.urls')),     # التقييم والنفسية
+        path('', include('patients.urls_patient')),                  
+        path('doctors/', include('doctors.urls_patient')),           
+        path('appointments/', include('appointments.urls_patient')), 
+        path('articles/', include('articles.urls_patient')),         
+        path('assessment/', include('assessments.urls')),            
+        path('ratings/', include('ratings.urls')),
+        path('reports/', include('reports.urls')),
     ])),
 
-    # 3. بوابة تطبيق الطبيب بالكامل (Doctor App Gateway)
+    # 3. بوابة الطبيب (Doctor App Gateway)
     path('api/doctor/', include([
-        path('', include('doctors.urls_doctors')),            # ملف روابط الطبيب الخاص ببروفايله وأوقاته المخصص له فقط (تم التعديل هنا)
-        path('appointments/', include('appointments.urls')), # لوحة تحكم الطبيب للمواعيد
-        path('articles/', include('articles.urls')),         # إدارة مقالات الطبيب (إنشاء، تعديل، حذف)
+        path('', include('doctors.urls_doctor')),                    
+        path('appointments/', include('appointments.urls_doctor')),  
+        path('articles/', include('articles.urls_doctor')),          
+        path('patients/', include('patients.urls_doctor')), # رؤية الطبيب لملف المريض
     ])),
-    
-    path('api/reports/', include('reports.urls')),
 
-    # السويغر والتوثيق
+    # توثيق السويغر
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
