@@ -41,7 +41,7 @@ class Appointment(models.Model):
     type = models.CharField(max_length=20, choices=Type.choices, default=Type.CHAT)
     date = models.DateTimeField()
     has_next_session = models.BooleanField(default=False) 
-
+    created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return f"Appointment {self.id} - {self.status}"
 
