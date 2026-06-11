@@ -1,5 +1,7 @@
+from decimal import Decimal
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 
 from django.contrib.auth import get_user_model
 from patients.models import Patient
@@ -37,24 +39,6 @@ class Appointment(models.Model):
     def __str__(self):
         return f"Appointment {self.id} - {self.status}"
 
-class Payment(models.Model):
-    class Status(models.TextChoices):
-        PENDING = 'pending', 'Pending'
-        COMPLETED = 'completed', 'Completed'
-        REFUNDED = 'refunded', 'Refunded'
-        REJECTED = 'rejected', 'Rejected'
-
-    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='payment')
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    admin_commission = models.DecimalField(max_digits=10, decimal_places=2)
-    doctor_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    is_transferred_to_doctor = models.BooleanField(default=False)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    date = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"Payment {self.id} - Status: {self.status}"
-
 
 class SessionPrice(models.Model):
     doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='session_prices')
@@ -71,22 +55,43 @@ class SessionPrice(models.Model):
 
 class Payment(models.Model):
     class Status(models.TextChoices):
-        Pending = 'pending', 'Pending'
-        Completed = 'completed', 'Completed'
-        Refunded = 'refunded', 'Refunded'  # حالة الاسترداد المالي
+        PENDING = 'pending', 'Pending'
+        COMPLETED = 'completed', 'Completed'
+        REFUNDED = 'refunded', 'Refunded'
+        REJECTED = 'rejected', 'Rejected'
 
     appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='payment')
+    
+    # تفاصيل المبالغ المالية
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    admin_commission = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    doctor_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    is_transferred_to_doctor = models.BooleanField(default=False)
-    date = models.DateTimeField(default=timezone.now)
-    method = models.CharField(max_length=100)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.Pending)
+    admin_commission = models.DecimalField(max_digits=10, decimal_places=2, blank=True)
+    doctor_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True)
+    
+    # تفاصيل العملية والحالة
+    method = models.CharField(max_length=100, blank=True, null=True)
     transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    is_transferred_to_doctor = models.BooleanField(default=False)
+    
+    # التواريخ
+    date = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        """
+        حساب تلقائي لعمولة التطبيق ومستحقات الطبيب بناءً على النسبة
+        الموجودة في ملف settings.py قبل حفظ البيانات في قاعدة البيانات.
+        """
+        if self.amount:
+            # تحويل القيم إلى Decimal لضمان دقة الحسابات المالية
+            amount_decimal = Decimal(str(self.amount))
+            commission_rate = Decimal(str(settings.COMMISSION_RATE))
+            
+            # العمليات الحسابية
+            self.admin_commission = amount_decimal * commission_rate
+            self.doctor_amount = amount_decimal - self.admin_commission
+            
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Payment {self.amount} for Appt {self.appointment.pk} ({self.status})"
-
-

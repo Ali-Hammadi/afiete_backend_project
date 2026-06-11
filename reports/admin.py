@@ -21,7 +21,6 @@ class UserReportAdmin(admin.ModelAdmin):
     search_fields = ('content', 'author__username', 'reported_user__username')
     readonly_fields = ('created_at',)
     
-    # Custom Admin Actions to handle penalties
     actions = ['freeze_user_funds', 'suspend_user_account', 'delete_user_account', 'dismiss_report']
 
     @admin.action(description='Freeze reported user financial funds')
@@ -30,18 +29,18 @@ class UserReportAdmin(admin.ModelAdmin):
         for report in queryset:
             user = report.reported_user
             if user:
-                # Dynamically checks if 'is_funds_frozen' field exists in your Custom User model
                 if hasattr(user, 'is_funds_frozen'):
                     user.is_funds_frozen = True
                     user.save()
                 
                 report.action_taken = 'FUNDS_FROZEN'
+                report.admin_notes = "Financial funds frozen by administrator due to user report."
                 report.save()
                 success_count += 1
                 
         self.message_user(
             request, 
-            f"Successfully froze funds for {success_count} user(s). (Make sure 'is_funds_frozen' exists in your User model)", 
+            f"Successfully froze funds for {success_count} user(s).", 
             messages.WARNING
         )
 
@@ -51,41 +50,42 @@ class UserReportAdmin(admin.ModelAdmin):
         for report in queryset:
             user = report.reported_user
             if user:
-                user.is_active = False  # Standard Django field to deactivate / block logins
+                user.is_active = False  
                 user.save()
                 
                 report.action_taken = 'ACCOUNT_SUSPENDED'
+                report.admin_notes = "Account temporarily suspended by administrator."
                 report.save()
                 success_count += 1
                 
-        self.message_user(request, f"Successfully deactivated/suspended accounts for {success_count} user(s).", messages.SUCCESS)
+        self.message_user(request, f"Successfully suspended accounts for {success_count} user(s).", messages.SUCCESS)
 
-    @admin.action(description='Deactivate reported user account')
+    @admin.action(description='Deactivate reported user account (Soft Delete)')
     def delete_user_account(self, request, queryset):
         """
-        يقوم بتعطيل الحساب بدلاً من حذفه لضمان سلامة البيانات 
-        والسجلات المرتبطة (مثل المواعيد والعمليات المالية).
+        تحديث مطور: يقوم بتعطيل الحساب ومنع تسجيل الدخول (Soft Delete) 
+        بدلاً من حذفه نهائياً لحماية سلامة المواعيد والسجلات المالية للتطبيق.
         """
         success_count = 0
         for report in queryset:
             user = report.reported_user
             if user:
-                # التعطيل المنطقي: الحساب لا يزال موجوداً لكن لا يمكنه تسجيل الدخول
+                # الحفاظ على الكيان البرمجي مع سحب صلاحية النشاط
                 user.is_active = False  
                 user.save()
                 
-                # تحديث التقرير ليعكس الإجراء المتخذ
-                report.action_taken = 'ACCOUNT_DELETED' # يمكنك الاحتفاظ بهذا الـ Choice أو تغيير الاسم
-                report.admin_notes = "User account deactivated (Soft Delete) by admin."
+                report.action_taken = 'ACCOUNT_DELETED'
+                report.admin_notes = "Account permanently deactivated (Soft Delete) by admin due to critical violations."
                 report.save()
                 success_count += 1
             
         self.message_user(
             request, 
-            f"Successfully deactivated {success_count} account(s). No data was removed from the database.", 
+            f"Successfully deactivated {success_count} account(s). No historical data was lost.", 
             messages.SUCCESS
         )
+
     @admin.action(description='Dismiss selected reports (No penalty)')
     def dismiss_report(self, request, queryset):
-        queryset.update(action_taken='DISMISSED')
+        queryset.update(action_taken='DISMISSED', admin_notes="Report investigated and dismissed by admin.")
         self.message_user(request, "Selected reports have been dismissed without any penalties.", messages.INFO)

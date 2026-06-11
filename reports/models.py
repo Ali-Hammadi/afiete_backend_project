@@ -3,8 +3,8 @@ from users.models import User
 
 class AppReport(models.Model):
     """
-    Handles technical bugs, feature suggestions, or general app feedback 
-    submitted by users via the app settings screen.
+    يتعامل مع الأخطاء التقنية، الاقتراحات، والملاحظات العامة حول التطبيق
+    والتي يتم إرسالها من صفحة إعدادات التطبيق.
     """
     REPORT_TYPE_CHOICES = [
         ('BUG', 'Technical Bug / Error'),
@@ -33,8 +33,8 @@ class AppReport(models.Model):
 
 class UserReport(models.Model):
     """
-    Handles mutual reports between doctors and patients, filled after sessions 
-    or from user profiles. Includes administrative tracking fields.
+    يتعامل مع البلاغات المتبادلة بين الأطباء والمرضى، سواء بعد الجلسات
+    أو من خلال الملفات الشخصية. يتضمن حقول التحكم الإداري.
     """
     ACTION_CHOICES = [
         ('NONE', 'No Action Taken'),
@@ -61,7 +61,7 @@ class UserReport(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     
-    # Administrative control fields
+    # حقول التحكم الإداري
     action_taken = models.CharField(
         max_length=20, 
         choices=ACTION_CHOICES, 
