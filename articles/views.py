@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Case, When, IntegerField
 from users.models import User
 from users.permissions import IsDoctor, IsPatient
-
+from drf_spectacular.utils import extend_schema
 from .serializers import (
     ArticaleCraeteSerializer,
     ArticleRetrieveSerializer,
@@ -19,7 +19,9 @@ from .serializers import (
 from .models import Article, Reaction
 from .recommender import recommend_articles
 from .pagination import ArticlePagination
-
+from rest_framework import serializers
+class EmptySerializer(serializers.Serializer):
+    pass
 class ArticleCreateAPIView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     serializer_class = ArticaleCraeteSerializer
@@ -37,7 +39,8 @@ class ArticleRetrieveAPIView(generics.RetrieveAPIView):
     serializer_class = PatientArticleSerializer # المريض عند جلب مقالة مفردة يرى بيانات نظيفة أيضاً
     
     def get_queryset(self):
-        return Article.objects.with_reactions(user=self.request.user).filter(status="Approved")
+        if getattr(self, 'swagger_fake_view', False):
+            return Article.objects.with_reactions(user=self.request.user).filter(status="Approved")
 
 class ArticleListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
@@ -45,7 +48,8 @@ class ArticleListAPIView(generics.ListAPIView):
     pagination_class = ArticlePagination
 
     def get_queryset(self):
-        username = self.request.query_params.get('author_username', None)
+        if getattr(self, 'swagger_fake_view', False):
+            username = self.request.query_params.get('author_username', None)
         objs = Article.objects.with_reactions(user=self.request.user)
         
         if username:
@@ -60,7 +64,8 @@ class RecommendedArticlesAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsPatient]
 
     def get_queryset(self):
-        recommended_ids = recommend_articles(patient=self.request.user.patient)
+        if getattr(self, 'swagger_fake_view', False):
+            recommended_ids = recommend_articles(patient=self.request.user.patient)
         
         order = Case(
             *[When(id=aid, then=pos) for pos, aid in enumerate(recommended_ids)],
@@ -78,8 +83,9 @@ class AllApprovedArticlesListAPIView(generics.ListAPIView):
     pagination_class = ArticlePagination
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
         # يضمن سحب المقالات المقبولة فقط ومرتبة من الأحدث للأقدم
-        return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-created_at')
+            return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-created_at')
 
 class ArticlesMostReactionScoreListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -87,7 +93,8 @@ class ArticlesMostReactionScoreListAPIView(generics.ListAPIView):
     pagination_class = ArticlePagination
 
     def get_queryset(self):
-        return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-score', '-likes')
+        if getattr(self, 'swagger_fake_view', False):
+            return Article.objects.with_reactions(user=self.request.user).filter(status="Approved").order_by('-score', '-likes')
 
 class ArticleUpdateAPIView(generics.UpdateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
@@ -95,7 +102,8 @@ class ArticleUpdateAPIView(generics.UpdateAPIView):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        return Article.objects.filter(author=self.request.user.doctor)
+        if getattr(self, 'swagger_fake_view', False):
+            return Article.objects.filter(author=self.request.user.doctor)
 
 
 class ReactionGenericAPIView(generics.GenericAPIView):

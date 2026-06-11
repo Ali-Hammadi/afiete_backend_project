@@ -1,5 +1,5 @@
 from datetime import timedelta
-
+from drf_spectacular.utils import extend_schema
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, viewsets, status
@@ -32,6 +32,9 @@ from users.permissions import IsDoctor, IsVerified
 # -----------------------------------------------------------------------------
 # Views
 # -----------------------------------------------------------------------------
+from rest_framework import serializers
+class EmptySerializer(serializers.Serializer):
+    pass
 
 class DoctorRegisterView(generics.CreateAPIView):
     queryset = Doctor.objects.all()
@@ -80,7 +83,8 @@ class DoctorEducationView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
     def get_queryset(self):
-        return Education.objects.filter(doctor=self.request.user.doctor)
+        if getattr(self, 'swagger_fake_view', False):
+            return Education.objects.filter(doctor=self.request.user.doctor)
     
     @extend_schema(
         summary="Add Education Certification",
@@ -98,7 +102,7 @@ class DoctorEducationView(generics.CreateAPIView):
 class ScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     serializer_class = ScheduleSerializer
-
+    
     def get_object(self):
         doctor = self.request.user.doctor
         id = self.kwargs.get(self.lookup_field)
@@ -108,15 +112,16 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             raise NotFound("Not found schedule")
             
     def get_queryset(self):
-        day_of_week = self.request.query_params.get('day_of_week')
-        doctor = self.request.user.doctor
-        if not day_of_week: 
-            return Schedule.objects.filter(doctor=doctor)
-        return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
+        if getattr(self, 'swagger_fake_view', False):
+            day_of_week = self.request.query_params.get('day_of_week')
+            doctor = self.request.user.doctor
+            if not day_of_week: 
+                return Schedule.objects.filter(doctor=doctor)
+            return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
 
 class AvailableSlotsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
-
+    serializer_class = AvailableSlotsSerializer # أضف هذا السطر
     @extend_schema(
         summary="Get Doctor Available Slots by Date",
         description="Returns an array of available booking hours based on the doctor's weekly work schedule.",
@@ -170,15 +175,16 @@ class DoctorListView(generics.ListAPIView):
     filterset_fields = ['specialties']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
         # 1. البدء بالأطباء المقبولين فقط
-        queryset = Doctor.objects.filter(status='approved')
+            queryset = Doctor.objects.filter(status='approved')
 
-        # 2. شرط أنواع الجلسات والأسعار (يجب أن يملك جلسة وسعرها أكبر من 0)
-        queryset = queryset.filter(session_prices__price__gt=0)
+            # 2. شرط أنواع الجلسات والأسعار (يجب أن يملك جلسة وسعرها أكبر من 0)
+            queryset = queryset.filter(session_prices__price__gt=0)
 
-        # 3. تطبيق قاعدة الـ 7 أيام (حساب وقت الفلترة بناءً على وقت الاستعلام الحالي)
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        queryset = queryset.filter(schedules__updated_at__gte=seven_days_ago)
+            # 3. تطبيق قاعدة الـ 7 أيام (حساب وقت الفلترة بناءً على وقت الاستعلام الحالي)
+            seven_days_ago = timezone.now() - timedelta(days=7)
+            queryset = queryset.filter(schedules__updated_at__gte=seven_days_ago)
 
-        # 4. منع تكرار الأطباء في الاستجابة (Distinct) لضمان أداء واجهات Flutter
-        return queryset.distinct()
+            # 4. منع تكرار الأطباء في الاستجابة (Distinct) لضمان أداء واجهات Flutter
+            return queryset.distinct()

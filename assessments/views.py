@@ -15,7 +15,7 @@ from rest_framework import status
 from appointments.serializers import AppointmentSerializer
 from users.permissions import IsAccountActiveAndUnfrozen
 from musics.views import RecommendedTracksView
-
+from drf_spectacular.utils import extend_schema
 class ServeyFormView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ServeyFormSerializer

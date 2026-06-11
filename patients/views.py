@@ -14,7 +14,7 @@ from rest_framework import status
 from users.permissions import IsAccountActiveAndUnfrozen
 import uuid
 from rest_framework.exceptions import PermissionDenied
-
+from drf_spectacular.utils import extend_schema
 
 class PatientRegisterView(generics.CreateAPIView):
     serializer_class = PatientRegisterSerializer

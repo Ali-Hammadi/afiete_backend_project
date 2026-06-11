@@ -3,7 +3,7 @@ from users.models import User
 from users.permissions import IsAccountActiveAndUnfrozen
 from .models import AppReport, UserReport
 from .serializers import AppReportSerializer, UserReportSerializer
-
+from drf_spectacular.utils import extend_schema
 class CreateAppReportView(generics.CreateAPIView):
     """إنشاء بلاغ تقني أو اقتراح خاص بالتطبيق"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]

@@ -5,7 +5,7 @@ from users.permissions import IsAccountActiveAndUnfrozen
 from .models import MusicEntity, BreathingExerciseEntity, UserRelaxProfile
 from .serializers import MusicEntitySerializer, BreathingExerciseEntitySerializer
 from .recommendation import get_recommended_tracks
-
+from drf_spectacular.utils import extend_schema
 class LastFeelingView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     def get(self, request):

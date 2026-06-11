@@ -20,7 +20,7 @@ from django.db import transaction
 from assessments.models import AssessmentResult
 from assessments.utils import grant_doctor_access_to_assessment
 from users.permissions import IsPatient, IsDoctor
-
+from drf_spectacular.utils import extend_schema
 from .models import Appointment, SessionPrice, Payment
 from .filters import AppointmentFilter
 from .serializers import (
@@ -34,11 +34,13 @@ from .serializers import (
     PatientUpdateNextSessionSerializer
 )
 from users.permissions import IsDoctor, IsPatient
+from rest_framework import serializers
 
 class AppointmentPagination(PageNumberPagination):
     page_size = 5
 
-
+class EmptySerializer(serializers.Serializer):
+    pass
 # --- تعديل الأسعار: منع الحذف تماماً وتحويلها إلى Generics منيعة ---
 class SessionPricesListCreateView(ListCreateAPIView):
     """Each doctor views and creates their own pricing schedules exclusively."""
@@ -46,7 +48,8 @@ class SessionPricesListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
-        return SessionPrice.objects.filter(doctor=self.request.user.doctor)
+        if getattr(self, 'swagger_fake_view', False):
+            return SessionPrice.objects.filter(doctor=self.request.user.doctor)
 
     def perform_create(self, serializer):
         serializer.save(doctor=self.request.user.doctor)
@@ -59,7 +62,8 @@ class SessionPricesRetrieveUpdateView(RetrieveUpdateAPIView):
     lookup_field = 'type'
 
     def get_queryset(self):
-        return SessionPrice.objects.filter(doctor=self.request.user.doctor)
+        if getattr(self, 'swagger_fake_view', False):
+            return SessionPrice.objects.filter(doctor=self.request.user.doctor)
 
 
 class BookAppointmentView(generics.CreateAPIView):
@@ -110,7 +114,8 @@ class PatientAppointmentListView(ListAPIView):
     pagination_class = AppointmentPagination
 
     def get_queryset(self):
-        return Appointment.objects.filter(patient=self.request.user.patient).order_by('-date')
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.filter(patient=self.request.user.patient).order_by('-date')
 
 
 class PatientPastAppointmentsListView(ListAPIView):
@@ -120,7 +125,8 @@ class PatientPastAppointmentsListView(ListAPIView):
     pagination_class = AppointmentPagination
 
     def get_queryset(self):
-        return Appointment.objects.filter(
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.filter(
             patient=self.request.user.patient,
             status__in=['completed', 'cancelled', 'expired']
         ).order_by('-date')
@@ -136,7 +142,8 @@ class DoctorAppointmentListView(ListAPIView):
     pagination_class = AppointmentPagination
 
     def get_queryset(self):
-        return Appointment.objects.filter(doctor=self.request.user.doctor).order_by('-date')
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.filter(doctor=self.request.user.doctor).order_by('-date')
         
 
 class CancelAppointmentView(UpdateAPIView):
@@ -144,8 +151,9 @@ class CancelAppointmentView(UpdateAPIView):
     permission_classes = [IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
         # البحث محصور فقط بمواعيد المريض المسجل حالياً لضمان عزل البيانات الكامل
-        return Appointment.objects.filter(patient=self.request.user.patient)
+            return Appointment.objects.filter(patient=self.request.user.patient)
         
     def update(self, request, *args, **kwargs):
         appointment = self.get_object()
@@ -174,7 +182,8 @@ class RetrieveAppointmentAPIView(RetrieveAPIView):
     serializer_class = RetrieveAppointmentSerializer
     
     def get_queryset(self):
-        user = self.request.user
+        if getattr(self, 'swagger_fake_view', False):
+            user = self.request.user
         if hasattr(user, 'doctor'):
             return Appointment.objects.filter(doctor=user.doctor)
         elif hasattr(user, 'patient'):
@@ -194,7 +203,8 @@ class PaymentListView(ListAPIView):
     pagination_class = AppointmentPagination
     
     def get_queryset(self):
-        user = self.request.user
+        if getattr(self, 'swagger_fake_view', False):
+            user = self.request.user
         if hasattr(user, 'patient'):
             return Payment.objects.filter(appointment__patient=user.patient)
         elif hasattr(user, 'doctor'):
@@ -227,7 +237,8 @@ class PatientMissedSessionsListView(ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsPatient]
 
     def get_queryset(self):
-        return Appointment.objects.filter(
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.filter(
             patient=self.request.user.patient,
             status=Appointment.Status.Missed
         ).order_by('-date')
@@ -240,7 +251,8 @@ class DoctorMissedSessionsListView(ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
-        return Appointment.objects.filter(
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.filter(
             doctor=self.request.user.doctor,
             status=Appointment.Status.Missed
         ).order_by('-date')

@@ -8,10 +8,13 @@ from users.permissions import IsAccountActiveAndUnfrozen
 from .serializers import RatingSerializer, RatingReadSerializer
 from .models import Rating
 from .pagination import RatingPagination
-
+from drf_spectacular.utils import extend_schema
 from users.permissions import IsPatient
 from appointments.models import Appointment
 from users.utils import is_doctor
+from rest_framework import serializers
+class EmptySerializer(serializers.Serializer):
+    pass
 
 class RatingCreateView(APIView):
     """
@@ -75,11 +78,12 @@ class RatingListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     def get_queryset(self):
-        doctor_username = self.kwargs.get('doctor_username')
+        if getattr(self, 'swagger_fake_view', False):
+            doctor_username = self.kwargs.get('doctor_username')
 
-        # إذا لم يتم تمرير اسم مستخدم وكان المستخدم الحالي طبيباً، يعرض تقييماته الخاصة
-        if not doctor_username and is_doctor(self.request.user):
-            return Rating.objects.filter(
+            # إذا لم يتم تمرير اسم مستخدم وكان المستخدم الحالي طبيباً， يعرض تقييماته الخاصة
+            if not doctor_username and is_doctor(self.request.user):
+                return Rating.objects.filter(
                 appointment__doctor=self.request.user.doctor
             ).order_by('-created_at')
         

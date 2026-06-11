@@ -5,6 +5,8 @@ from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+
+from doctors.views import EmptySerializer
 from .models import User, Otp
 from .permissions import IsAccountActiveAndUnfrozen
 from .serializers import ( UserLoginSerializer,
@@ -21,7 +23,7 @@ from .serializers import ( UserLoginSerializer,
                            )
 from .mail_sender import send_email
 from .utils import *
-
+from drf_spectacular.utils import extend_schema
 from doctors.serializers import DoctorProfileSerialzer
 from patients.serializers import PatientProfileSerializer
 
@@ -94,7 +96,7 @@ class VerifyOtpView(generics.GenericAPIView):
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
-
+    serializer_class = EmptySerializer  # الحل النهائي
     def post(self, request):
         print(request.data)
         return Response(status=200)

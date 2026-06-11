@@ -152,7 +152,7 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Afiete Project API',
     'DESCRIPTION': 'Backend endpoints documentation for Afiete Application',
     'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
+    'DISABLE_ERRORS': True,
     'SERVERS': [
         {'url': 'https://alihammadi.pythonanywhere.com', 'description': 'Production Server'},
         {'url': 'http://127.0.0.1:8000', 'description': 'Local Development Server'},
