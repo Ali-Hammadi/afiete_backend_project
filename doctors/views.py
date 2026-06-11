@@ -1,21 +1,35 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions, viewsets, status
-from rest_framework.response import Response 
+from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter, OpenApiExample
-
+# استيراد الموديلات من تطبيق الـ doctors
 from .models import Doctor, Education, Schedule, SubSpecialization
-from .serializers import (DoctorRegisterSerializer,
-                          DoctorProfileSerialzer, 
-                          DoctorEducationSerializer,
-                          ScheduleSerializer,
-                          DoctorPublicProfileSerializer,
-                          AvailableSlotsSerializer,
-                          SubSpecializationSerializer)
+
+# استيراد الموديلات من تطبيق الـ appointments (لأغراض الفلترة)
+from appointments.models import SessionPrice
+
+# استيراد السيريالايزرز
+from .serializers import (
+    DoctorRegisterSerializer,
+    DoctorProfileSerialzer, 
+    DoctorEducationSerializer,
+    ScheduleSerializer,
+    DoctorPublicProfileSerializer,
+    AvailableSlotsSerializer,
+    SubSpecializationSerializer
+)
+
+# استيراد الصلاحيات
 from users.permissions import IsDoctor, IsVerified 
+
+# -----------------------------------------------------------------------------
+# Views
+# -----------------------------------------------------------------------------
 
 class DoctorRegisterView(generics.CreateAPIView):
     queryset = Doctor.objects.all()
@@ -32,7 +46,7 @@ class DoctorRegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         super().create(request, *args, **kwargs)
         return Response({"message": "Doctor registered successfully", "is_verified": False}, status=201)
-    
+
 
 class DoctorProfileView(generics.RetrieveUpdateAPIView):
     queryset = Doctor.objects.all()
@@ -44,24 +58,12 @@ class DoctorProfileView(generics.RetrieveUpdateAPIView):
         
     @extend_schema(
         summary="Update Authenticated Doctor Profile",
-        description="Allows doctors to modify experience, bio, and multi-select sub-specialties via an array of integers (IDs).",
+        description="Allows doctors to modify experience, bio, and multi-select sub-specialties.",
         request=DoctorProfileSerialzer,
         responses={
-            200: OpenApiResponse(
-                response=DoctorProfileSerialzer,
-                description="Profile updated successfully. Returns clean objects with text names."
-            ),
-            400: OpenApiResponse(
-                description="Bad Request. Provided invalid format or non-existent specialization ID.",
-                examples=[
-                    OpenApiExample(
-                        'Specialty ID Error Example',
-                        value={"specialties": ["Invalid pk \"99\" - object does not exist."]},
-                        response_only=True
-                    )
-                ]
-            ),
-            401: OpenApiResponse(description="Unauthorized. Invalid or missing Bearer token.")
+            200: OpenApiResponse(response=DoctorProfileSerialzer, description="Profile updated successfully."),
+            400: OpenApiResponse(description="Bad Request."),
+            401: OpenApiResponse(description="Unauthorized.")
         }
     )
     def update(self, request, *args, **kwargs):
@@ -69,15 +71,16 @@ class DoctorProfileView(generics.RetrieveUpdateAPIView):
         return Response({
             "data": res.data,
             "message": "Doctor profile updated successfully"}, status=200)
-    
 
+
+# --- كلاس إدارة تعليم الطبيب ---
 class DoctorEducationView(generics.CreateAPIView):
     serializer_class = DoctorEducationSerializer
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
         return Education.objects.filter(doctor=self.request.user.doctor)
-
+    
     @extend_schema(
         summary="Add Education Certification",
         description="Allows a logged-in doctor to append an academic degree or certification to their history.",
@@ -85,15 +88,10 @@ class DoctorEducationView(generics.CreateAPIView):
         responses={201: OpenApiResponse(description="Doctor education added successfully.")}
     )
     def create(self, request, *args, **kwargs):
-        # تصحيح الخطأ: تم تعديل البارامترات لتعمل بالتوافق مع بنية دجانغو الأساسية واستقبال الـ request
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(doctor=request.user.doctor)
         return Response({"message": "Doctor education added successfully"}, status=201)
-
-    def get_object(self):
-        pk = self.kwargs.get('pk')
-        return Education.objects.get(id=pk, doctor=self.request.user.doctor)
 
 
 class ScheduleViewSet(viewsets.ModelViewSet):
@@ -115,13 +113,12 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             return Schedule.objects.filter(doctor=doctor)
         return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
 
-
 class AvailableSlotsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @extend_schema(
         summary="Get Doctor Available Slots by Date",
-        description="Returns an array of available booking hours based on the doctor's weekly work schedule and specific date query parameter.",
+        description="Returns an array of available booking hours based on the doctor's weekly work schedule.",
         parameters=[
             OpenApiParameter(name="date", type=str, location=OpenApiParameter.QUERY, description="Target date in YYYY-MM-DD format.")
         ]
@@ -139,7 +136,7 @@ class AvailableSlotsView(APIView):
             return Response(final_serializer.data, status=status.HTTP_200_OK)
             
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
 
 class DoctorPublicProfileView(generics.RetrieveAPIView): 
     queryset = Doctor.objects.all()
@@ -158,44 +155,29 @@ class SubSpecializationListView(generics.ListAPIView):
     serializer_class = SubSpecializationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(
-        summary="List All Medical Specialties",
-        description="Returns a complete array configuration containing all 11 psychological and medical specialties with their structural IDs.",
-        responses={
-            200: OpenApiResponse(
-                response=SubSpecializationSerializer(many=True),
-                description="List of all system specialties fetched successfully."
-            )
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
 
 class DoctorListView(generics.ListAPIView):
-    queryset = Doctor.objects.filter(status='approved')
+    """
+    قائمة الأطباء المتاحين:
+    1. فقط الأطباء الذين حالتهم 'approved'.
+    2. يجب أن يمتلك الطبيب سعر جلسة > 0 (تلقائياً يستبعد من ليس لديه أسعار).
+    3. يجب أن يمتلك الطبيب جدول مواعيد واحد على الأقل.
+    """
     serializer_class = DoctorPublicProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['specialties']
 
-    @extend_schema(
-        summary="List Approved Doctors with Specialty Filtering",
-        description="Fetches verified profiles. Patients can append the optional query parameter `?specialties=id` to display filtered options.",
-        parameters=[
-            OpenApiParameter(
-                name="specialties",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                description="The exact database ID of the specialization to filter by (e.g., ?specialties=1)."
-            )
-        ],
-        responses={
-            200: OpenApiResponse(
-                response=DoctorPublicProfileSerializer(many=True),
-                description="Filtered list retrieved smoothly."
-            )
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    def get_queryset(self):
+        # 1. البدء بالأطباء المقبولين فقط
+        queryset = Doctor.objects.filter(status='approved')
+
+        # 2. شرط الأسعار (سعر أكبر من 0)
+        # هذا الشرط يضمن وجود سجل سعر وقيمته أكبر من صفر
+        queryset = queryset.filter(session_prices__price__gt=0)
+
+        # 3. شرط المواعيد (يجب أن يكون لدى الطبيب جداول مواعيد)
+        queryset = queryset.filter(schedules__isnull=False)
+
+        # 4. إزالة التكرارات الناتجة عن الـ JOIN
+        return queryset.distinct()

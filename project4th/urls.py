@@ -15,18 +15,18 @@ urlpatterns = [
 
     # 2. بوابة تطبيق المريض بالكامل (Patient App Gateway)
     path('api/patient/', include([
-        path('', include('patients.urls')),  # حساب المريض نفسه
-        path('doctors/', include('doctors.urls')), # رؤية الأطباء والتخصصات من منظور المريض
+        path('', include('patients.urls')),                  # حساب المريض نفسه
+        path('doctors/', include('doctors.urls_patient')),   # رؤية الأطباء والتخصصات من منظور المريض (تم التعديل هنا)
         path('appointments/', include('appointments.urls')), # حجوزات المريض ومدفوعاته
-        path('articles/', include('articles.urls')), # تصفح المقالات والتفاعل معها
-        # path('assessment/', include('assessment.urls')), # التقييم والنفسية (تأكد من إضافتها هنا)
+        path('articles/', include('articles.urls')),         # تصفح المقالات والتفاعل معها
+        path('assessment/', include('assessment.urls')),     # التقييم والنفسية
     ])),
 
     # 3. بوابة تطبيق الطبيب بالكامل (Doctor App Gateway)
     path('api/doctor/', include([
-        path('', include('doctors.urls')), # بروفايل الطبيب، أوقات الدوام، والتعليم
+        path('', include('doctors.urls_doctor')),            # ملف روابط الطبيب الخاص ببروفايله وأوقاته المخصص له فقط (تم التعديل هنا)
         path('appointments/', include('appointments.urls')), # لوحة تحكم الطبيب للمواعيد
-        path('articles/', include('articles.urls')), # إدارة مقالات الطبيب (إنشاء، تعديل، حذف)
+        path('articles/', include('articles.urls')),         # إدارة مقالات الطبيب (إنشاء، تعديل، حذف)
     ])),
 
     # السويغر والتوثيق
