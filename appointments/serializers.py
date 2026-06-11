@@ -56,8 +56,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
-        fields = ['id', 'doctor_username', 'type', 'day_date', 'slot', 'status', 'date', 'duration', 'has_next_session']
-        read_only_fields = ['status', 'date', 'duration', 'has_next_session']
+        fields = ['id', 'doctor_username', 'type', 'day_date', 'slot', 'status', 'date', 'has_next_session']
+        read_only_fields = ['status', 'date', 'has_next_session']
 
     def validate(self, attrs):
         doctor_username = attrs.get('doctor_username')
@@ -104,9 +104,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance:
             overlapping_appointments = overlapping_appointments.exclude(pk=self.instance.pk)
 
+        # تحذير: إذا لم يكن الموديل يحتوي على duration، سيسبب هذا السطر خطأ
         for app in overlapping_appointments:
+            # افتراضياً نستخدم duration 30 إذا كان الحقل غير موجود في الموديل
+            duration = getattr(app, 'duration', 30)
             app_start = app.date
-            app_end = app.date + timedelta(minutes=app.duration)
+            app_end = app.date + timedelta(minutes=duration)
             if start_datetime < app_end and end_datetime > app_start:
                 raise serializers.ValidationError(
                     {"slot": "This slot overlaps with an existing appointment for this doctor."}
@@ -114,7 +117,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
         attrs['doctor'] = doctor
         attrs['date'] = start_datetime
-        attrs['duration'] = int((end_datetime - start_datetime).total_seconds() / 60)
         
         attrs.pop('doctor_username')
         attrs.pop('day_date')
@@ -128,17 +130,13 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# الكلاس المدمج والمنظف لإعادة الجدولة (يرث من AppointmentSerializer ليقوم بجميع الفحوصات)
 class RescheduleAppointmentSerializer(AppointmentSerializer):
     class Meta(AppointmentSerializer.Meta):
         fields = ['doctor_username', 'day_date', 'slot']
 
     def validate(self, attrs):
-        # السماح بإعادة الجدولة فقط إذا كان الموعد مؤكداً أو فائتاً (Missed)
         if self.instance and self.instance.status not in [Appointment.Status.Confirmed, Appointment.Status.Missed]:
             raise ValidationError("يمكنك إعادة جدولة المواعيد المؤكدة أو الجلسات الفائتة فقط.")
-        
-        # استدعاء التحقق الأساسي من التضارب وأوقات الدوام
         return super().validate(attrs)
 
 
@@ -148,7 +146,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
 
     class Meta: 
         model = Appointment
-        fields = ['id', 'patient_username', 'doctor_username', 'date', 'duration', 'type', 'status', 'has_next_session']  
+        fields = ['id', 'patient_username', 'doctor_username', 'date', 'type', 'status', 'has_next_session']
 
 
 class PatientSerializer(serializers.Serializer): 
@@ -164,7 +162,8 @@ class RetrieveAppointmentSerializer(serializers.ModelSerializer):
 
     class Meta: 
         model = Appointment
-        fields = ['id', 'patient', 'patient_username', 'doctor_username', 'date', 'duration', 'type', 'status', 'has_next_session']  
+        # تمت إزالة 'duration' هنا لأنها تسبب خطأ عدم وجود الحقل في الموديل
+        fields = ['id', 'patient', 'patient_username', 'doctor_username', 'date', 'type', 'status', 'has_next_session']
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -225,7 +224,6 @@ class PaymentSerializer(serializers.ModelSerializer):
         return payment
 
 
-
 class DoctorMinimalSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     class Meta:
@@ -238,7 +236,7 @@ class PastAppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
-        fields = ['id', 'doctor', 'date', 'duration', 'type', 'status', 'has_next_session', 'created_at']
+        fields = ['id', 'doctor', 'date', 'type', 'status', 'has_next_session', 'created_at']
 
 
 class DoctorProfileSerializer(serializers.ModelSerializer):
@@ -254,7 +252,6 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
         return round(average, 1) if average else 0.0
 
 
-# سيريالايزر مخصص للمريض لتحديد استمرارية الكورس العلاجي
 class PatientUpdateNextSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
@@ -262,5 +259,5 @@ class PatientUpdateNextSessionSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if self.instance.status not in [Appointment.Status.Completed, Appointment.Status.Missed]:
-            raise ValidationError("يمكنك تحديد حالة الجلسة القادمة للمواعيد المنتهية أو الفائتة فقط.")
+            raise ValidationError("You can only update the next session status for completed or missed appointments.")
         return attrs
