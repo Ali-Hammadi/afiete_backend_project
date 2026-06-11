@@ -66,3 +66,21 @@ class GoogleAuthView(APIView):
                 },
                 "role": "patient"
             }, status=status.HTTP_200_OK)
+            
+
+class DoctorRetrievePatientView(generics.RetrieveAPIView):
+    queryset = Patient.objects.all()
+    serializer_class = PatientProfileSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+
+    def get_object(self):
+        patient = super().get_object()
+        
+        doctor = self.request.user.doctor
+        
+        appointment_exists = Appointment.objects.filter(doctor=doctor, patient=patient).exists()
+        
+        if not appointment_exists:
+            raise PermissionDenied("Access denied: No appointment found between this doctor and patient.")
+            
+        return patient

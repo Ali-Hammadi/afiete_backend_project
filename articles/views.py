@@ -97,28 +97,34 @@ class ArticleUpdateAPIView(generics.UpdateAPIView):
     def get_queryset(self):
         return Article.objects.filter(author=self.request.user.doctor)
 
+
 class ReactionGenericAPIView(generics.GenericAPIView):
     serializer_class = ReactionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
+    # 🔒 تأمين المسار: السماح للمرضى المسجلين فقط بالتفاعل ومنع الأطباء نهائياً
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
     def post(self, request, article_id):
         user = request.user
         reaction_type = request.data.get('reaction')
         article = get_object_or_404(Article, id=article_id)
         
+        # التأكد من أن المقال معتمد ومقبول قبل السماح بالتفاعل معه
         if article.status != "Approved":
             return Response({"error": "Article not approved"}, status=status.HTTP_400_BAD_REQUEST)
         
         exist = Reaction.objects.filter(user=user, article=article).first()
         if exist:
+            # إذا ضغط المستخدم على نفس التفاعل مجدداً، يتم حذفه (Toggle)
             if exist.reaction == reaction_type:
                 exist.delete()
                 return Response({"message": f"{reaction_type} removed"}, status=status.HTTP_200_OK)
             else:
+                # إذا غيّر رأيه من Like إلى Dislike أو العكس، يتم التحديث
                 exist.reaction = reaction_type
                 exist.save()
                 return Response({"message": f"{reaction_type} updated"}, status=status.HTTP_200_OK)
         
+        # إنشاء تفاعل جديد في حال لم يكن هناك تفاعل سابق
         Reaction.objects.create(user=user, article=article, reaction=reaction_type)
         return Response({"message": f"{reaction_type} added"}, status=status.HTTP_201_CREATED)
 
