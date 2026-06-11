@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RefundAppointmentView, SmartCreateAppointmentReviewView
+from .views import RefundAppointmentView
 from .views import (
     BookAppointmentView, 
     PatientAppointmentListView, 
@@ -8,7 +8,6 @@ from .views import (
     CancelAppointmentView, 
     RetrieveAppointmentAPIView, 
     RescheduleAppointmentView,
-    CreateAppointmentReviewView,
     CreatePaymentView, 
     PaymentListView,
     DoctorWalletView,  
@@ -33,7 +32,6 @@ urlpatterns = [
     path('history/', PatientPastAppointmentsListView.as_view(), name='patient-appointments-history'),   
     path('patient/missed/', PatientMissedSessionsListView.as_view(), name='patient-missed-sessions'),
     path('payments/create/', CreatePaymentView.as_view(), name='payment-create'),
-    path('<int:appointment_id>/smart-review/', SmartCreateAppointmentReviewView.as_view(), name='smart-review-appointment'),
     path('<int:appointment_id>/refund/', RefundAppointmentView.as_view(), name='refund-appointment'),
 
     # ==================== 🔒 Shared / Specific Actions ====================

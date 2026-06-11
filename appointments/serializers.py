@@ -5,7 +5,9 @@ from django.utils import timezone
 from django.db import models
 from datetime import datetime, timedelta
 from django.db import transaction
-from .models import Appointment, SessionPrice, Payment, Review
+
+from ratings.serializers import RatingReadSerializer
+from .models import Appointment, SessionPrice, Payment
 from doctors.models import Doctor, Schedule
 from assessments.serializers import ScoresSerializer
 
@@ -223,11 +225,6 @@ class PaymentSerializer(serializers.ModelSerializer):
         return payment
 
 
-class ReviewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Review
-        fields = ['rating', 'comment']
-
 
 class DoctorMinimalSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
@@ -245,7 +242,7 @@ class PastAppointmentSerializer(serializers.ModelSerializer):
 
 
 class DoctorProfileSerializer(serializers.ModelSerializer):
-    reviews = ReviewSerializer(many=True, read_only=True)
+    reviews = RatingReadSerializer(many=True, read_only=True)
     average_rating = serializers.SerializerMethodField()
 
     class Meta:

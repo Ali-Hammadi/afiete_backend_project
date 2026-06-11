@@ -19,7 +19,7 @@ from assessments.models import AssessmentResult
 from assessments.utils import grant_doctor_access_to_assessment
 from users.permissions import IsPatient, IsDoctor
 
-from .models import Appointment, SessionPrice, Payment, Review
+from .models import Appointment, SessionPrice, Payment
 from .filters import AppointmentFilter
 from .serializers import (
     PricesSerializer,
@@ -29,7 +29,6 @@ from .serializers import (
     RetrieveAppointmentSerializer,
     RescheduleAppointmentSerializer,
     PastAppointmentSerializer,
-    ReviewSerializer,
     PatientUpdateNextSessionSerializer
 )
 from users.permissions import IsDoctor, IsPatient
@@ -181,35 +180,6 @@ class RescheduleAppointmentView(UpdateAPIView):
         return response
 
 
-class CreateAppointmentReviewView(APIView):
-    """Restricts feedback generation until after the session is 'completed'."""
-    permission_classes = [IsAuthenticated, IsPatient]
-
-    def post(self, request, appointment_id):
-        appointment = get_object_or_404(Appointment, id=appointment_id, patient=request.user.patient)
-
-        if appointment.status != 'completed':
-            return Response(
-                {"error": "You cannot review a doctor before the appointment is completed."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if hasattr(appointment, 'review'):
-            return Response(
-                {"error": "You have already reviewed this appointment instance."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = ReviewSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(
-                appointment=appointment,
-                doctor=appointment.doctor,
-                patient=request.user.patient
-            )
-            return Response({"message": "Your review has been submitted successfully."}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class CreatePaymentView(CreateAPIView):
     """Charges the patient based on live doctor tariff tables and activates bookings."""
@@ -340,59 +310,6 @@ class PatientUpdateNextSessionView(UpdateAPIView):
         return get_object_or_404(Appointment, pk=self.kwargs.get('pk'), patient=self.request.user.patient)
     
  # ==================== ➕ Smart Review & Treatment Course Logic (English Responses) ====================
-
-class SmartCreateAppointmentReviewView(APIView):
-    """
-    Smart review interface implementing business rules:
-    1. Prevents review unless the appointment status is completed.
-    2. Prevents text commentary if the treatment course is ongoing (rating stars only).
-    3. Flushes previous reviews by this patient for this doctor to show only the latest experience.
-    """
-    permission_classes = [IsAuthenticated, IsPatient]
-
-    def post(self, request, appointment_id):
-        appointment = get_object_or_404(Appointment, id=appointment_id, patient=request.user.patient)
-
-        # 1. Ensure the session is actually completed
-        if appointment.status != 'completed':
-            return Response(
-                {"error": "You cannot review the doctor before the session is fully completed."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # 2. Prevent reviewing the exact same appointment instance more than once
-        if hasattr(appointment, 'review'):
-            return Response(
-                {"error": "You have already reviewed this specific appointment."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = ReviewSerializer(data=request.data)
-        if serializer.is_valid():
-            comment = serializer.validated_data.get('comment')
-            
-            # 3. Treatment course rule: if an upcoming session exists (has_next_session=True), text comments are restricted
-            if appointment.has_next_session is True and comment:
-                return Response(
-                    {"error": "Since the treatment course is ongoing, you can only provide a star rating. Text commentary is restricted until the course finishes."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            with transaction.atomic():
-                # 4. Anti-duplication logic: delete any prior reviews from this patient for this doctor to keep only the latest experience
-                Review.objects.filter(patient=request.user.patient, doctor=appointment.doctor).delete()
-                
-                # Save the new review and bind it to the correct relational contexts
-                serializer.save(
-                    appointment=appointment,
-                    doctor=appointment.doctor,
-                    patient=request.user.patient
-                )
-                
-            return Response({"message": "Your smart review has been submitted successfully."}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-
 
 class BookAppointmentView(CreateAPIView):
     serializer_class = AppointmentSerializer
