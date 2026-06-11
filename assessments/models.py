@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from patients.models import Patient
 
 
@@ -75,7 +76,59 @@ class UserAnswer(models.Model):
 
     def clean(self):
         if self.answer_option.question_id != self.question_id:
-            raise ValueError("Answer does not belong to the question")
+            raise ValidationError("Answer does not belong to the question")
 
     def __str__(self):
         return f"{self.patient} - {self.question}: {self.answer_option}"
+
+
+class AssessmentResult(models.Model):
+    patient = models.ForeignKey(
+        Patient, 
+        on_delete=models.CASCADE, 
+        related_name='assessment_results'
+    )
+    result_summary = models.TextField(blank=True, null=True) 
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Result for {self.patient} at {self.created_at.strftime('%Y-%m-%d')}"
+
+
+# 🌟 الموديل الأول المفقود: لإدارة حالة تفعيل الاختبار للمريض
+class PatientAssessmentProfile(models.Model):
+    patient = models.OneToOneField(
+        Patient, 
+        on_delete=models.CASCADE, 
+        related_name='assessment_profile'
+    )
+    can_take_assessment = models.BooleanField(default=True)
+    last_activated_at = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Assessment Profile for {self.patient}"
+
+
+# 🌟 الموديل الثاني المفقود: لصلاحية وصول الأطباء لنتائج الاختبارات
+class AssessmentAccess(models.Model):
+    # استخدام النص 'doctors.Doctor' يمنع حدوث الـ Circular Import تماماً
+    doctor = models.ForeignKey(
+        'doctors.Doctor', 
+        on_delete=models.CASCADE, 
+        related_name='shared_assessments'
+    )
+    assessment = models.ForeignKey(
+        AssessmentResult, 
+        on_delete=models.CASCADE, 
+        related_name='access_grants'
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['doctor', 'assessment']
+
+    def __str__(self):
+        return f"Dr. {self.doctor} access to Assessment {self.assessment_id}"

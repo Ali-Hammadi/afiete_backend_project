@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, viewsets, status
@@ -9,7 +11,7 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParamet
 
 # استيراد الموديلات من تطبيق الـ doctors
 from .models import Doctor, Education, Schedule, SubSpecialization
-
+from django.db.models import Max
 # استيراد الموديلات من تطبيق الـ appointments (لأغراض الفلترة)
 from appointments.models import SessionPrice
 
@@ -158,10 +160,10 @@ class SubSpecializationListView(generics.ListAPIView):
 
 class DoctorListView(generics.ListAPIView):
     """
-    قائمة الأطباء المتاحين:
-    1. فقط الأطباء الذين حالتهم 'approved'.
-    2. يجب أن يمتلك الطبيب سعر جلسة > 0 (تلقائياً يستبعد من ليس لديه أسعار).
-    3. يجب أن يمتلك الطبيب جدول مواعيد واحد على الأقل.
+    قائمة الأطباء المتاحين للمرضى بناءً على الشروط الصارمة:
+    1. حالة الطبيب المقبول فقط (approved).
+    2. يملك جلسات بأسعار حقيقية أكبر من صفر.
+    3. قاعدة الـ 7 أيام: قام بتحديث أو تحديد مواعيده خلال الـ 7 أيام الماضية حصراً.
     """
     serializer_class = DoctorPublicProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -172,12 +174,12 @@ class DoctorListView(generics.ListAPIView):
         # 1. البدء بالأطباء المقبولين فقط
         queryset = Doctor.objects.filter(status='approved')
 
-        # 2. شرط الأسعار (سعر أكبر من 0)
-        # هذا الشرط يضمن وجود سجل سعر وقيمته أكبر من صفر
+        # 2. شرط أنواع الجلسات والأسعار (يجب أن يملك جلسة وسعرها أكبر من 0)
         queryset = queryset.filter(session_prices__price__gt=0)
 
-        # 3. شرط المواعيد (يجب أن يكون لدى الطبيب جداول مواعيد)
-        queryset = queryset.filter(schedules__isnull=False)
+        # 3. تطبيق قاعدة الـ 7 أيام (حساب وقت الفلترة بناءً على وقت الاستعلام الحالي)
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        queryset = queryset.filter(schedules__updated_at__gte=seven_days_ago)
 
-        # 4. إزالة التكرارات الناتجة عن الـ JOIN
+        # 4. منع تكرار الأطباء في الاستجابة (Distinct) لضمان أداء واجهات Flutter
         return queryset.distinct()

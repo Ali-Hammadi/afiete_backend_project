@@ -19,12 +19,12 @@ urlpatterns = [
         path('doctors/', include('doctors.urls_patient')),   # رؤية الأطباء والتخصصات من منظور المريض (تم التعديل هنا)
         path('appointments/', include('appointments.urls')), # حجوزات المريض ومدفوعاته
         path('articles/', include('articles.urls')),         # تصفح المقالات والتفاعل معها
-        path('assessment/', include('assessment.urls')),     # التقييم والنفسية
+        path('assessment/', include('assessments.urls')),     # التقييم والنفسية
     ])),
 
     # 3. بوابة تطبيق الطبيب بالكامل (Doctor App Gateway)
     path('api/doctor/', include([
-        path('', include('doctors.urls_doctor')),            # ملف روابط الطبيب الخاص ببروفايله وأوقاته المخصص له فقط (تم التعديل هنا)
+        path('', include('doctors.urls_doctors')),            # ملف روابط الطبيب الخاص ببروفايله وأوقاته المخصص له فقط (تم التعديل هنا)
         path('appointments/', include('appointments.urls')), # لوحة تحكم الطبيب للمواعيد
         path('articles/', include('articles.urls')),         # إدارة مقالات الطبيب (إنشاء، تعديل، حذف)
     ])),

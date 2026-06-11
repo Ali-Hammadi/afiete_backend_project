@@ -8,11 +8,11 @@ from .recommender import recommend_doctors
 from .pagination import DoctorPagination
 from users.permissions import IsDoctor, IsPatient
 from rest_framework.permissions import IsAuthenticated
-from .models import Appointment, TimeSlot # بفرض وجود موديل للمواعيد المتاحة
+from appointments.models import Appointment
+from doctors.models import Schedule
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from .serializers import AppointmentSerializer
-
+from appointments.serializers import AppointmentSerializer
 
 class ServeyFormView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -66,7 +66,7 @@ class RescheduleAppointmentView(APIView):
         new_appointment_type = request.data.get('appointment_type') # إعادة تعيين نوع الحجز
 
         # 2. التحقق من توفر الموعد الجديد
-        new_slot = get_object_or_404(TimeSlot, id=new_time_slot_id, doctor=appointment.doctor, date=new_date)
+        new_slot = get_object_or_404(Schedule, id=new_time_slot_id, doctor=appointment.doctor, date=new_date)
         if new_slot.is_booked:
             return Response({"error": "The new appoinmemt is booked already."}, status=status.HTTP_400_BAD_REQUEST)
 

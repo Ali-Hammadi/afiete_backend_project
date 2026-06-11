@@ -99,18 +99,21 @@ class ArticleUpdateAPIView(generics.UpdateAPIView):
 
 
 class ReactionGenericAPIView(generics.GenericAPIView):
-    serializer_class = ReactionSerializer
-    # 🔒 تأمين المسار: السماح للمرضى المسجلين فقط بالتفاعل ومنع الأطباء نهائياً
+    # 🔥 التحصين الصارم: يسمح فقط للمستخدم المسجل والـ Patient بالتفاعل
     permission_classes = [permissions.IsAuthenticated, IsPatient]
+    serializer_class = ReactionSerializer
 
     def post(self, request, article_id):
         user = request.user
-        reaction_type = request.data.get('reaction')
         article = get_object_or_404(Article, id=article_id)
         
-        # التأكد من أن المقال معتمد ومقبول قبل السماح بالتفاعل معه
-        if article.status != "Approved":
+        # التأكد من أن المقالة مقبولة أولاً لكي يتم التفاعل معها
+        if article.status != 'Approved':
             return Response({"error": "Article not approved"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        reaction_type = request.data.get('reaction')
+        if reaction_type not in [Reaction.LIKE, Reaction.DISLIKE]:
+            return Response({"error": "Invalid reaction type"}, status=status.HTTP_400_BAD_REQUEST)
         
         exist = Reaction.objects.filter(user=user, article=article).first()
         if exist:
@@ -127,6 +130,7 @@ class ReactionGenericAPIView(generics.GenericAPIView):
         # إنشاء تفاعل جديد في حال لم يكن هناك تفاعل سابق
         Reaction.objects.create(user=user, article=article, reaction=reaction_type)
         return Response({"message": f"{reaction_type} added"}, status=status.HTTP_201_CREATED)
+
 
 class DeleteArticleGenericAPIView(generics.GenericAPIView):
     serializer_class = DeleteArticleSerializer

@@ -1,11 +1,12 @@
 from django.contrib import admin
 from .models import QuestionGroup, Question, AnswerOption, UserAnswer
 
+# تسجيل الموديلات الخاصة بتطبيق الـ assessments في لوحة التحكم
 Models = [
-    QuestionGroup, 
+    QuestionGroup,
     Question,
     AnswerOption,
-    UserAnswer,
+    UserAnswer
 ]
 
 admin.site.register(Models)
