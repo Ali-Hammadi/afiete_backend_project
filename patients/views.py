@@ -1,3 +1,5 @@
+from appointments.models import Appointment
+
 from .models import *
 from rest_framework.response import Response
 from rest_framework import generics
@@ -74,21 +76,28 @@ class DoctorRetrievePatientView(generics.RetrieveAPIView):
     serializer_class = PatientProfileSerializer
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     
-    def get_object(self):
+def get_object(self):
         patient = super().get_object()
         doctor = self.request.user.doctor
         
-        # 1. التحقق: هل توجد جلسة "قادمة" أو "نشطة" فقط؟
-        # إذا كان المريض قد أنهى آخر جلسة واختار عدم وجود جلسة قادمة (has_next_session=False)
-        # فهذا يعني أن الطبيب فقد صلاحية الوصول.
-        active_appointment = Appointment.objects.filter(
+        # 1. التحقق: هل توجد جلسة "قادمة" أو "نشطة"؟
+        has_active_appointment = Appointment.objects.filter(
             doctor=doctor, 
             patient=patient,
-            status__in=['scheduled', 'confirmed'], # الجلسات التي لم تنتهِ بعد
-            has_next_session=True                 # التأكد من رغبة المريض بالاستمرار
+            status__in=['scheduled', 'confirmed']
         ).exists()
-        
-        if not active_appointment:
-            raise PermissionDenied("Access denied: You have no active ongoing sessions with this patient.")
-            
+
+        # 2. التحقق: هل توجد جلسة مكتملة ولكن المريض حدد وجود جلسة قادمة (has_next_session=True)؟
+        # (هذا يعني أن العلاقة العلاجية لم تنتهِ بعد)
+        has_ongoing_course = Appointment.objects.filter(
+            doctor=doctor,
+            patient=patient,
+            status=Appointment.Status.Completed,
+            has_next_session=True
+        ).exists()
+
+        # إذا لم يكن هناك موعد نشط ولم يكن هناك كورس علاجي مستمر، نمنع الوصول
+        if not (has_active_appointment or has_ongoing_course):
+            raise PermissionDenied("You do not have permission to view this patient's profile. No active sessions or ongoing treatment courses found.")
+
         return patient
