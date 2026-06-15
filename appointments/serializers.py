@@ -11,6 +11,26 @@ from .models import Appointment, SessionPrice, Payment
 from doctors.models import Doctor, Schedule
 from assessments.serializers import ScoresSerializer
 
+
+from rest_framework import serializers
+
+class DoctorWalletSerializer(serializers.Serializer):
+    total_earnings = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        help_text="إجمالي أرباح الطبيب من الجلسات المكتملة"
+    )
+    transferred_amount = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        help_text="المبالغ التي تم تحويلها بالفعل لحساب الطبيب البنكي"
+    )
+    pending_clearance = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        help_text="المبالغ المعلقة القابلة للسحب"
+    )
+
 class PricesSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionPrice

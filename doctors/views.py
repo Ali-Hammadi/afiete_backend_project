@@ -98,7 +98,6 @@ class DoctorEducationView(generics.CreateAPIView):
         serializer.save(doctor=request.user.doctor)
         return Response({"message": "Doctor education added successfully"}, status=201)
 
-
 class ScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
     serializer_class = ScheduleSerializer
@@ -112,12 +111,17 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             raise NotFound("Not found schedule")
             
     def get_queryset(self):
+        # 1. حماية السويغر: إذا كان الطلب وهمياً لبناء الـ Schema ارجع كويري سيت فارغ فوراً لحماية النظام من المستخدم المجهول
         if getattr(self, 'swagger_fake_view', False):
-            day_of_week = self.request.query_params.get('day_of_week')
-            doctor = self.request.user.doctor
-            if not day_of_week: 
-                return Schedule.objects.filter(doctor=doctor)
-            return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
+            return Schedule.objects.none()
+
+        # 2. الطلبات الحقيقية (خارج الـ if): الآن يضمن إرجاع قيم دائماً للـ Frontend وللرابط المباشر للمعرف {id}
+        doctor = self.request.user.doctor
+        day_of_week = self.request.query_params.get('day_of_week')
+        
+        if not day_of_week: 
+            return Schedule.objects.filter(doctor=doctor)
+        return Schedule.objects.filter(day_of_week=day_of_week, doctor=doctor)
 
 class AvailableSlotsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]

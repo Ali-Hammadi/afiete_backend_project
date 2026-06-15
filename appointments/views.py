@@ -24,6 +24,7 @@ from drf_spectacular.utils import extend_schema
 from .models import Appointment, SessionPrice, Payment
 from .filters import AppointmentFilter
 from .serializers import (
+    DoctorWalletSerializer,
     PricesSerializer,
     PaymentSerializer,
     AppointmentSerializer,
@@ -220,8 +221,13 @@ class DoctorWalletView(APIView):
     """
     permission_classes = [IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
+    @extend_schema(
+        summary="Get Doctor Wallet Data",
+        description="ترجع تفاصيل الأرباح الإجمالية، المبالغ المحولة، والمبالغ المعلقة للطبيب الحالي.",
+        responses={200: DoctorWalletSerializer}  # ⬅️ هذا السطر السحري الذي يجعل الـ JSON يظهر في السويغر
+    )
     def get(self, request):
-        # Defensive check to ensure the user has a doctor profile
+        # التحقق الأمني لضمان وجود حساب طبيب مرتبط
         if not hasattr(request.user, 'doctor'):
             return Response(
                 {"detail": "Doctor profile not found for this user."},
@@ -230,13 +236,13 @@ class DoctorWalletView(APIView):
 
         doctor = request.user.doctor
         
-        # Filter payments for the current doctor with 'completed' status
+        # جلب العمليات المالية المكتملة الخاصة بالطبيب
         doctor_payments = Payment.objects.filter(
             appointment__doctor=doctor, 
             status='completed'
         )
         
-        # Calculate totals using aggregation
+        # العمليات الحسابية
         total_earnings = doctor_payments.aggregate(
             total=Sum('doctor_amount')
         )['total'] or Decimal('0.00')
@@ -247,15 +253,15 @@ class DoctorWalletView(APIView):
             total=Sum('doctor_amount')
         )['total'] or Decimal('0.00')
         
-        # Calculate pending amount
         pending_clearance = total_earnings - transferred_amount
 
+        # إرجاع البيانات بنفس هيكلة السيريلايزر تماماً
         return Response({
             "total_earnings": total_earnings,          
             "transferred_amount": transferred_amount,  
             "pending_clearance": pending_clearance     
         }, status=status.HTTP_200_OK)
-           
+
 # ==================== 1. جلب الجلسات الفائتة للمريض ====================
 class PatientMissedSessionsListView(ListAPIView):
     """عرض قائمة الجلسات الفائتة التي تخلف عنها المريض الحالي"""
