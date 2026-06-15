@@ -6,9 +6,10 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Case, When, IntegerField
 from users.models import User
 from users.permissions import IsDoctor, IsPatient
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from .serializers import (
     ArticaleCraeteSerializer,
+    ArticleDeleteResponseSerializer,
     ArticleRetrieveSerializer,
     ArticleSerializer,
     PatientArticleSerializer,  # استيراد السيريالايزر النظيف الجديد للمريض
@@ -140,14 +141,33 @@ class ReactionGenericAPIView(generics.GenericAPIView):
         return Response({"message": f"{reaction_type} added"}, status=status.HTTP_201_CREATED)
 
 
+
 class DeleteArticleGenericAPIView(generics.GenericAPIView):
     serializer_class = DeleteArticleSerializer
     permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
 
+    @extend_schema(
+        summary="Delete Doctor Article",
+        description="Deletes a specific article belonging to the currently authenticated doctor using the article ID.",
+        parameters=[
+            OpenApiParameter(
+                name='article_id', 
+                type=int, 
+                location=OpenApiParameter.PATH, 
+                description='The unique identifier (ID) of the article to delete'
+            )
+        ],
+        responses={
+            200: ArticleDeleteResponseSerializer, # Swagger will capture this JSON structure
+            400: OpenApiResponse(description="Article is not related to this author"),
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+            404: OpenApiResponse(description="Article not found")
+        }
+    )
     def delete(self, request, article_id):
         article = get_object_or_404(Article, id=article_id)
         if article.author != request.user.doctor:
             return Response({"error": "Article not related to author"}, status=status.HTTP_400_BAD_REQUEST)
         
         article.delete()
-        return Response({"message": "Article deleted"}, status=status.HTTP_200_OK)
+        return Response({"message": "Article deleted successfully"}, status=status.HTTP_200_OK)

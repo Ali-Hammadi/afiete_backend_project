@@ -106,3 +106,7 @@ class ArticleUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         instance.status = "Pending"
         return super().update(instance, validated_data)
+    
+    
+class ArticleDeleteResponseSerializer(serializers.Serializer):
+    message = serializers.CharField(help_text="Article deletion confirmation message.")
