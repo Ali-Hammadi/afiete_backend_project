@@ -1,34 +1,32 @@
-from rest_framework import generics, permissions, response, status, serializers
+from rest_framework import generics, permissions, response, status, serializers as drf_serializers
 from rest_framework.exceptions import ValidationError
-from django.db.models import Q  # مخصصة للاستعلامات المركبة (OR)
-from django.utils import timezone
-from appointments.models import Appointment
+from django.db.models import Q  # مخصصة للاستعلامات المركبة (OR / AND)
 from users.permissions import IsAccountActiveAndUnfrozen
+from appointments.models import Appointment  # استيراد موديل المواعيد للتحقق من الجلسات المشتركة
 from .models import AppReport, UserReport
 from .serializers import AppReportSerializer, UserReportSerializer
 
-# استيراد أدوات مكتبة drf-spectacular لحل مشكلة السواجر الفارغ
+# أدوات مكتبة drf-spectacular لتوثيق السواجر المشترك
 from drf_spectacular.utils import extend_schema, inline_serializer
 
 
 class ReportConfigView(generics.GenericAPIView):
-    """إرجاع الإعدادات والأنواع الأساسية للريبورتات ليتم استهلاكها ديناميكياً في التطبيق"""
+    """إرجاع الإعدادات والأنواع الأساسية للريبورتات ليتم استهلاكها ديناميكياً في التطبيق (مشترك)"""
     permission_classes = [permissions.IsAuthenticated]
 
-    # توثيق البنية الشجرية للـ JSON بدقة في السواجر
     @extend_schema(
-        summary="Get reports dynamic configuration and reasons mapping",
-        description="Returns available report types and their corresponding dynamic reason categories for Flutter UI rendering.",
+        summary="Get reports configuration and reasons mapping",
+        description="Returns available report categories and reasons for both Patient and Doctor applications.",
         responses={
             200: inline_serializer(
                 name='ReportConfigResponse',
                 fields={
-                    'reportTypes': serializers.ListField(child=serializers.CharField()),
+                    'reportTypes': drf_serializers.ListField(child=drf_serializers.CharField()),
                     'reasons': inline_serializer(
                         name='ReportReasonsMap',
                         fields={
-                            'app': serializers.ListField(child=serializers.DictField()),
-                            'user': serializers.ListField(child=serializers.DictField()),
+                            'app': drf_serializers.ListField(child=drf_serializers.DictField()),
+                            'user': drf_serializers.ListField(child=drf_serializers.DictField()),
                         }
                     )
                 }
@@ -37,20 +35,19 @@ class ReportConfigView(generics.GenericAPIView):
     )
     def get(self, request, *args, **kwargs):
         config_data = {
-            "reportTypes": ["doctor", "session", "app"],
+            "reportTypes": ["user", "app"],
             "reasons": {
                 "app": [
-                    {"key": "appBug", "label": "Technical Bug / Error"},
-                    {"key": "crashOrFreeze", "label": "App Crashes or Freezes"},
-                    {"key": "paymentIssue", "label": "Payment or Transaction Issue"},
-                    {"key": "other", "label": "Other Issues"}
+                    {"key": "BUG", "label": "Technical Bug / Error"},
+                    {"key": "SUGGESTION", "label": "Suggestion / Improvement"},
+                    {"key": "OTHER", "label": "Other Issues"}
                 ],
                 "user": [
-                    {"key": "unprofessional", "label": "Unprofessional Behavior"},
-                    {"key": "harassment", "label": "Harassment"},
-                    {"key": "inappropriateContent", "label": "Inappropriate Content"},
-                    {"key": "missingAppointment", "label": "Missing Appointments"},
-                    {"key": "other", "label": "Other Issues"}
+                    {"key": "unprofessional", "label": "Unprofessional Behavior / معاملة غير مهنية"},
+                    {"key": "harassment", "label": "Harassment / إساءة أو تحرش"},
+                    {"key": "inappropriateContent", "label": "Inappropriate Content / محتوى غير لائق"},
+                    {"key": "missingAppointment", "label": "Missing Appointments / عدم الحضور للموعد"},
+                    {"key": "other", "label": "Other Issues / أسباب أخرى"}
                 ]
             }
         }
@@ -58,73 +55,52 @@ class ReportConfigView(generics.GenericAPIView):
 
 
 class CreateAppReportView(generics.CreateAPIView):
-    """إنشاء بلاغ خاص بالتطبيق"""
+    """إنشاء بلاغ تقني أو اقتراح خاص بالتطبيق (متاح للمريض والطبيب)"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = AppReportSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user, report_type='app')
+        # يتم حفظ البلاغ وربطه بالمستخدم الحالي تلقائياً سواء كان مريض أو طبيب
+        serializer.save(author=self.request.user)
 
 
 class CreateUserReportView(generics.CreateAPIView):
-    """إنشاء بلاغ سلوكي ضد مستخدم آخر (سواء كان طبيب أو مريض) أو متعلق بجلسة معينة"""
+    """إنشاء بلاغ سلوكي ضد مستخدم آخر بشرط وجود تاريخ جلسات مشترك بينهما"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = UserReportSerializer
 
     def perform_create(self, serializer):
         user = self.request.user
-        target_id = serializer.validated_data.get('target_id')
-        report_type = serializer.validated_data.get('report_type')
+        reported_user = serializer.validated_data.get('reported_user')
         
-        # 1. منع المستخدم من الإبلاغ عن نفسه كإجراء حماية أمني
-        if report_type == 'doctor' and str(target_id) == str(user.id):
+        # 1. حماية أمنية: منع المستخدم من الإبلاغ عن نفسه
+        if reported_user == user:
             raise ValidationError({"message": "You cannot report yourself."})
             
-        # 2. إذا كان البلاغ موجه ضد مستخدم (من الملف الشخصي للطبيب أو العكس)
-        if report_type == 'doctor':
-            # نتحقق من وجود أي موعد يربط بين المستخدم الحالي والمستخدم المستهدف (target_id)
-            has_appointment = Appointment.objects.filter(
-                Q(patient__user=user, doctor__user_id=target_id) | 
-                Q(doctor__user=user, patient__user_id=target_id)
-            ).exists()
+        # 2. التحقق الذكي من الجلسات المشتركة:
+        # نبحث في جدول المواعيد للتأكد من وجود موعد يجمع بين هذا المستخدم والمستخدم المشتكى عليه
+        # الشرط يغطي الحالتين (المشتكي مريض والمشتكى عليه طبيب، أو المشتكي طبيب والمشتكى عليه مريض)
+        shared_session_exists = Appointment.objects.filter(
+            Q(patient__user=user, doctor__user=reported_user) | 
+            Q(doctor__user=user, patient__user=reported_user)
+        ).exists()
+        
+        if not shared_session_exists:
+            raise ValidationError({
+                "message": "You cannot report this user because there is no shared appointment/session history between you."
+            })
             
-            if not has_appointment:
-                raise ValidationError({
-                    "message": "You cannot report this user because there is no shared appointment history between you."
-                })
-            
-            # تحسين أمني: ربط معرّف الحساب تلقائياً بحقل الموديل الأساسي للـ UserReport
-            serializer.validated_data['reported_user_id'] = target_id
-                
-        # 3. إذا كان البلاغ موجه ضد جلسة/موعد معين (بعد انتهائه مثلاً)
-        elif report_type == 'session':
-            try:
-                # جلب الموعد باستخدام المعرف الممرر في الـ targetId
-                appointment = Appointment.objects.get(pk=target_id)
-                
-                # التحقق من أن المستخدم الحالي هو فعلياً طرف في هذا الموعد (إما المريض أو الطبيب)
-                if appointment.patient.user != user and appointment.doctor.user != user:
-                    raise ValidationError({
-                        "message": "You cannot report this session because you are not a participant in it."
-                    })
-            except Appointment.DoesNotExist:
-                raise ValidationError({"message": "The specified appointment does not exist."})
-
-            # في حال نجاح التحقق، يمكن توثيق اسم الهدف تلقائياً كـ target_name للسهولة في لوحة التحكم
-            serializer.validated_data['target_name'] = f"Appointment #{appointment.id} ({appointment.type})"
-
-        # حفظ البلاغ في قاعدة البيانات بعد اجتياز جميع الشروط
+        # 3. حفظ البلاغ إذا اجتاز التحقق بنجاح
         serializer.save(author=user)
 
 
 class MyReportsListView(generics.GenericAPIView):
-    """عرض سجل ريبورتات المستخدم الحالية بكافة أنواعها"""
+    """عرض السجل الكامل لجميع ريبورتات المستخدم الحالي فقط (سواء كان طبيب أو مريض)"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     
-    # توثيق مخرجات دمج السيريالايزرز داخل المصفوفات لكي تظهر واضحة في Swagger
     @extend_schema(
         summary="Get current user history of submitted reports",
-        description="Returns two parallel arrays containing all application technical reports and user behavior reports created by the user.",
+        description="Returns lists of reports created by the currently authenticated user (Patient or Doctor).",
         responses={
             200: inline_serializer(
                 name='MyReportsListResponse',
@@ -136,6 +112,7 @@ class MyReportsListView(generics.GenericAPIView):
         }
     )
     def get(self, request, *args, **kwargs):
+        # الفلترة هنا تتم بـ author=request.user، وهي تضمن بشكل صارم جداً أن كل يوزر يرى بلاغاته هو فقط
         app_reports = AppReport.objects.filter(author=request.user).order_by('-created_at')
         user_reports = UserReport.objects.filter(author=request.user).order_by('-created_at')
         

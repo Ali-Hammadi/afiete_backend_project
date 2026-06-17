@@ -9,13 +9,14 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from notes.urls import patient_router, doctor_router
 
 urlpatterns = [
-    # لوحة تحكم دجانغو المدمجة (وهي محمية الآن وتفلتر الملاحظات تلقائياً)
+    # لوحة تحكم دجانغو المدمجة
     path('admin/', admin.site.urls),
 
-    # 1. روابط المصادقة والحسابات المشتركة
+    # 1. روابط المصادقة والحسابات والميزات المشتركة (تخدم المريض والطبيب معاً)
     path('api/auth/', include('users.urls')),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),    
+    path('api/reports/', include('reports.urls')),
 
     # 2. بوابة المريض (Patient App Gateway)
     path('api/patient/', include([
@@ -25,7 +26,7 @@ urlpatterns = [
         path('articles/', include('articles.urls_patient')),         
         path('assessment/', include('assessments.urls')),            
         path('ratings/', include('ratings.urls')),
-        path('reports/', include('reports.urls')),
+        # ❌ تم حذف الـ reports من هنا لأنه انتقل للأعلى كقسم مشترك
         path('notes/', include(patient_router.urls)), 
     ])),
 
