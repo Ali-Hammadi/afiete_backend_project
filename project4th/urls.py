@@ -5,7 +5,11 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 
+# Import only what we need for the mobile apps
+from notes.urls import patient_router, doctor_router
+
 urlpatterns = [
+    # لوحة تحكم دجانغو المدمجة (وهي محمية الآن وتفلتر الملاحظات تلقائياً)
     path('admin/', admin.site.urls),
 
     # 1. روابط المصادقة والحسابات المشتركة
@@ -22,6 +26,7 @@ urlpatterns = [
         path('assessment/', include('assessments.urls')),            
         path('ratings/', include('ratings.urls')),
         path('reports/', include('reports.urls')),
+        path('notes/', include(patient_router.urls)), 
     ])),
 
     # 3. بوابة الطبيب (Doctor App Gateway)
@@ -29,7 +34,8 @@ urlpatterns = [
         path('', include('doctors.urls_doctor')),                    
         path('appointments/', include('appointments.urls_doctor')),  
         path('articles/', include('articles.urls_doctor')),          
-        path('patients/', include('patients.urls_doctor')), # رؤية الطبيب لملف المريض
+        path('patients/', include('patients.urls_doctor')), 
+        path('notes/', include(doctor_router.urls)), 
     ])),
 
     # توثيق السويغر

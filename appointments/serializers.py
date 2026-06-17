@@ -12,24 +12,23 @@ from doctors.models import Doctor, Schedule
 from assessments.serializers import ScoresSerializer
 
 
-from rest_framework import serializers
-
 class DoctorWalletSerializer(serializers.Serializer):
     total_earnings = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
-        help_text="إجمالي أرباح الطبيب من الجلسات المكتملة"
+        help_text="Total earnings of the doctor from completed sessions."
     )
     transferred_amount = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
-        help_text="المبالغ التي تم تحويلها بالفعل لحساب الطبيب البنكي"
+        help_text="Amounts already transferred to the doctor's bank account."
     )
     pending_clearance = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
-        help_text="المبالغ المعلقة القابلة للسحب"
+        help_text="Pending amounts available for withdrawal."
     )
+
 
 class PricesSerializer(serializers.ModelSerializer):
     class Meta:
@@ -124,9 +123,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance:
             overlapping_appointments = overlapping_appointments.exclude(pk=self.instance.pk)
 
-        # تحذير: إذا لم يكن الموديل يحتوي على duration، سيسبب هذا السطر خطأ
         for app in overlapping_appointments:
-            # افتراضياً نستخدم duration 30 إذا كان الحقل غير موجود في الموديل
             duration = getattr(app, 'duration', 30)
             app_start = app.date
             app_end = app.date + timedelta(minutes=duration)
@@ -150,13 +147,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+# --- Updated to English Error Message ---
 class RescheduleAppointmentSerializer(AppointmentSerializer):
     class Meta(AppointmentSerializer.Meta):
         fields = ['doctor_username', 'day_date', 'slot']
 
     def validate(self, attrs):
         if self.instance and self.instance.status not in [Appointment.Status.Confirmed, Appointment.Status.Missed]:
-            raise ValidationError("يمكنك إعادة جدولة المواعيد المؤكدة أو الجلسات الفائتة فقط.")
+            raise ValidationError("You can only reschedule confirmed or missed appointments.")
         return super().validate(attrs)
 
 
@@ -182,7 +180,6 @@ class RetrieveAppointmentSerializer(serializers.ModelSerializer):
 
     class Meta: 
         model = Appointment
-        # تمت إزالة 'duration' هنا لأنها تسبب خطأ عدم وجود الحقل في الموديل
         fields = ['id', 'patient', 'patient_username', 'doctor_username', 'date', 'type', 'status', 'has_next_session']
 
 
@@ -272,12 +269,14 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
         return round(average, 1) if average else 0.0
 
 
+# --- Optimized & Corrected for the 5-Minute Rule ---
 class PatientUpdateNextSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = ['has_next_session']
 
     def validate(self, attrs):
-        if self.instance.status not in [Appointment.Status.Completed, Appointment.Status.Missed]:
-            raise ValidationError("You can only update the next session status for completed or missed appointments.")
+        # The choice must happen while the session is Confirmed/Ongoing (5 minutes before the end)
+        if self.instance.status != Appointment.Status.Confirmed:
+            raise ValidationError("You can only decide on the next session during an active, confirmed appointment.")
         return attrs

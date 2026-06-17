@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'ratings',
     'articles',
     'musics',
-    
+    'notes',
     # المكتبات الخارجية والإضافات
     'rest_framework',
     'drf_spectacular',
