@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions, response, status
+from rest_framework import generics, permissions, response, status, serializers
 from rest_framework.exceptions import ValidationError
 from django.db.models import Q  # مخصصة للاستعلامات المركبة (OR)
 from django.utils import timezone
@@ -7,14 +7,34 @@ from users.permissions import IsAccountActiveAndUnfrozen
 from .models import AppReport, UserReport
 from .serializers import AppReportSerializer, UserReportSerializer
 
-# ⚠️ قم باستيراد موديل الـ Appointment من التطبيق الخاص به في مشروعك، على سبيل المثال:
-# from appointments.models import Appointment
+# استيراد أدوات مكتبة drf-spectacular لحل مشكلة السواجر الفارغ
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 
 class ReportConfigView(generics.GenericAPIView):
     """إرجاع الإعدادات والأنواع الأساسية للريبورتات ليتم استهلاكها ديناميكياً في التطبيق"""
     permission_classes = [permissions.IsAuthenticated]
 
+    # توثيق البنية الشجرية للـ JSON بدقة في السواجر
+    @extend_schema(
+        summary="Get reports dynamic configuration and reasons mapping",
+        description="Returns available report types and their corresponding dynamic reason categories for Flutter UI rendering.",
+        responses={
+            200: inline_serializer(
+                name='ReportConfigResponse',
+                fields={
+                    'reportTypes': serializers.ListField(child=serializers.CharField()),
+                    'reasons': inline_serializer(
+                        name='ReportReasonsMap',
+                        fields={
+                            'app': serializers.ListField(child=serializers.DictField()),
+                            'user': serializers.ListField(child=serializers.DictField()),
+                        }
+                    )
+                }
+            )
+        }
+    )
     def get(self, request, *args, **kwargs):
         config_data = {
             "reportTypes": ["doctor", "session", "app"],
@@ -63,7 +83,6 @@ class CreateUserReportView(generics.CreateAPIView):
         # 2. إذا كان البلاغ موجه ضد مستخدم (من الملف الشخصي للطبيب أو العكس)
         if report_type == 'doctor':
             # نتحقق من وجود أي موعد يربط بين المستخدم الحالي والمستخدم المستهدف (target_id)
-            # ملاحظة: الكود يفترض أن موديلي Patient و Doctor يرتبطان بـ User عبر حقل اسمه 'user'
             has_appointment = Appointment.objects.filter(
                 Q(patient__user=user, doctor__user_id=target_id) | 
                 Q(doctor__user=user, patient__user_id=target_id)
@@ -73,6 +92,9 @@ class CreateUserReportView(generics.CreateAPIView):
                 raise ValidationError({
                     "message": "You cannot report this user because there is no shared appointment history between you."
                 })
+            
+            # تحسين أمني: ربط معرّف الحساب تلقائياً بحقل الموديل الأساسي للـ UserReport
+            serializer.validated_data['reported_user_id'] = target_id
                 
         # 3. إذا كان البلاغ موجه ضد جلسة/موعد معين (بعد انتهائه مثلاً)
         elif report_type == 'session':
@@ -99,6 +121,20 @@ class MyReportsListView(generics.GenericAPIView):
     """عرض سجل ريبورتات المستخدم الحالية بكافة أنواعها"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     
+    # توثيق مخرجات دمج السيريالايزرز داخل المصفوفات لكي تظهر واضحة في Swagger
+    @extend_schema(
+        summary="Get current user history of submitted reports",
+        description="Returns two parallel arrays containing all application technical reports and user behavior reports created by the user.",
+        responses={
+            200: inline_serializer(
+                name='MyReportsListResponse',
+                fields={
+                    'app_reports': AppReportSerializer(many=True),
+                    'user_reports': UserReportSerializer(many=True),
+                }
+            )
+        }
+    )
     def get(self, request, *args, **kwargs):
         app_reports = AppReport.objects.filter(author=request.user).order_by('-created_at')
         user_reports = UserReport.objects.filter(author=request.user).order_by('-created_at')
