@@ -1,12 +1,17 @@
 from rest_framework import generics, permissions, response, status
-from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q  # مخصصة للاستعلامات المركبة (OR)
 from django.utils import timezone
-from assessments import serializers
+from appointments.models import Appointment
 from users.permissions import IsAccountActiveAndUnfrozen
 from .models import AppReport, UserReport
 from .serializers import AppReportSerializer, UserReportSerializer
 
-class ReportConfigView(APIView):
+# ⚠️ قم باستيراد موديل الـ Appointment من التطبيق الخاص به في مشروعك، على سبيل المثال:
+# from appointments.models import Appointment
+
+
+class ReportConfigView(generics.GenericAPIView):
     """إرجاع الإعدادات والأنواع الأساسية للريبورتات ليتم استهلاكها ديناميكياً في التطبيق"""
     permission_classes = [permissions.IsAuthenticated]
 
@@ -42,19 +47,52 @@ class CreateAppReportView(generics.CreateAPIView):
 
 
 class CreateUserReportView(generics.CreateAPIView):
-    """إنشاء بلاغ سلوكي ضد مستخدم (طبيب) أو متعلق بجلسة معينة"""
+    """إنشاء بلاغ سلوكي ضد مستخدم آخر (سواء كان طبيب أو مريض) أو متعلق بجلسة معينة"""
     permission_classes = [permissions.IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = UserReportSerializer
 
     def perform_create(self, serializer):
-        # التحقق من عدم قيام المستخدم بالإبلاغ عن نفسه إذا كان الهدف مستخدم
+        user = self.request.user
         target_id = serializer.validated_data.get('target_id')
         report_type = serializer.validated_data.get('report_type')
         
-        if report_type == 'doctor' and str(target_id) == str(self.request.user.id):
-            raise serializers.ValidationError({"message": "You cannot report yourself."})
+        # 1. منع المستخدم من الإبلاغ عن نفسه كإجراء حماية أمني
+        if report_type == 'doctor' and str(target_id) == str(user.id):
+            raise ValidationError({"message": "You cannot report yourself."})
             
-        serializer.save(author=self.request.user)
+        # 2. إذا كان البلاغ موجه ضد مستخدم (من الملف الشخصي للطبيب أو العكس)
+        if report_type == 'doctor':
+            # نتحقق من وجود أي موعد يربط بين المستخدم الحالي والمستخدم المستهدف (target_id)
+            # ملاحظة: الكود يفترض أن موديلي Patient و Doctor يرتبطان بـ User عبر حقل اسمه 'user'
+            has_appointment = Appointment.objects.filter(
+                Q(patient__user=user, doctor__user_id=target_id) | 
+                Q(doctor__user=user, patient__user_id=target_id)
+            ).exists()
+            
+            if not has_appointment:
+                raise ValidationError({
+                    "message": "You cannot report this user because there is no shared appointment history between you."
+                })
+                
+        # 3. إذا كان البلاغ موجه ضد جلسة/موعد معين (بعد انتهائه مثلاً)
+        elif report_type == 'session':
+            try:
+                # جلب الموعد باستخدام المعرف الممرر في الـ targetId
+                appointment = Appointment.objects.get(pk=target_id)
+                
+                # التحقق من أن المستخدم الحالي هو فعلياً طرف في هذا الموعد (إما المريض أو الطبيب)
+                if appointment.patient.user != user and appointment.doctor.user != user:
+                    raise ValidationError({
+                        "message": "You cannot report this session because you are not a participant in it."
+                    })
+            except Appointment.DoesNotExist:
+                raise ValidationError({"message": "The specified appointment does not exist."})
+
+            # في حال نجاح التحقق، يمكن توثيق اسم الهدف تلقائياً كـ target_name للسهولة في لوحة التحكم
+            serializer.validated_data['target_name'] = f"Appointment #{appointment.id} ({appointment.type})"
+
+        # حفظ البلاغ في قاعدة البيانات بعد اجتياز جميع الشروط
+        serializer.save(author=user)
 
 
 class MyReportsListView(generics.GenericAPIView):
