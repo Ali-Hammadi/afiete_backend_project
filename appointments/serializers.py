@@ -222,7 +222,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         except SessionPrice.DoesNotExist:
             raise serializers.ValidationError({"detail": "Active pricing configuration missing for this session profile."})
 
-        commission_rate = Decimal('0.10') 
+        commission_rate = Decimal('0.20') 
         admin_commission_value = total_amount * commission_rate
         doctor_amount_value = total_amount - admin_commission_value
 

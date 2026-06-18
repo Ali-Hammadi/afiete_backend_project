@@ -6,9 +6,12 @@ from appointments.models import Appointment  # استيراد موديل الم�
 from .models import AppReport, UserReport
 from .serializers import AppReportSerializer, UserReportSerializer
 
-# أدوات مكتبة drf-spectacular لتوثيق السواجر المشترك
+# أدوات مكتبة drf-spectacular لتوثيق السواجر المشترك وتجنب التوليد العشوائي
 from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework.serializers import Serializer
 
+class EmptySerializer(Serializer):
+    pass
 
 class ReportConfigView(generics.GenericAPIView):
     """إرجاع الإعدادات والأنواع الأساسية للريبورتات ليتم استهلاكها ديناميكياً في التطبيق (مشترك)"""

@@ -26,7 +26,9 @@ urlpatterns = [
         path('articles/', include('articles.urls_patient')),         
         path('assessment/', include('assessments.urls')),            
         path('ratings/', include('ratings.urls')),
-        # ❌ تم حذف الـ reports من هنا لأنه انتقل للأعلى كقسم مشترك
+        path('musics/', include('musics.urls_patient')), 
+        # path('notifications/', include('notifications.urls_patient')),
+        
         path('notes/', include(patient_router.urls)), 
     ])),
 
@@ -36,10 +38,12 @@ urlpatterns = [
         path('appointments/', include('appointments.urls_doctor')),  
         path('articles/', include('articles.urls_doctor')),          
         path('patients/', include('patients.urls_doctor')), 
+         
+        # path('notifications/', include('notifications.urls_doctor')),
         path('notes/', include(doctor_router.urls)), 
     ])),
 
-    # توثيق السويغر
+    # توثيق السويغر (Swagger)
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),

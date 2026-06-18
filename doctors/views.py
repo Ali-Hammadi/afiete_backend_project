@@ -179,16 +179,19 @@ class DoctorListView(generics.ListAPIView):
     filterset_fields = ['specialties']
 
     def get_queryset(self):
+        # 1. الحماية من توثيق Swagger الوهمي خارج مسار التنفيذ
         if getattr(self, 'swagger_fake_view', False):
-        # 1. البدء بالأطباء المقبولين فقط
-            queryset = Doctor.objects.filter(status='approved')
+            return Doctor.objects.none()
 
-            # 2. شرط أنواع الجلسات والأسعار (يجب أن يملك جلسة وسعرها أكبر من 0)
-            queryset = queryset.filter(session_prices__price__gt=0)
+        # 2. البدء بالأطباء المقبولين فقط
+        queryset = Doctor.objects.filter(status='approved')
 
-            # 3. تطبيق قاعدة الـ 7 أيام (حساب وقت الفلترة بناءً على وقت الاستعلام الحالي)
-            seven_days_ago = timezone.now() - timedelta(days=7)
-            queryset = queryset.filter(schedules__updated_at__gte=seven_days_ago)
+        # 3. شرط أنواع الجلسات والأسعار (يجب أن يملك جلسة وسعرها أكبر من 0)
+        queryset = queryset.filter(session_prices__price__gt=0)
 
-            # 4. منع تكرار الأطباء في الاستجابة (Distinct) لضمان أداء واجهات Flutter
-            return queryset.distinct()
+        # 4. تطبيق قاعدة الـ 7 أيام (حساب وقت الفلترة بناءً على وقت الاستعلام الحالي)
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        queryset = queryset.filter(schedules__updated_at__gte=seven_days_ago)
+
+        # 5. منع تكرار الأطباء في الاستجابة (Distinct) لضمان أداء واجهات Flutter
+        return queryset.distinct()

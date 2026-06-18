@@ -1,3 +1,5 @@
+from tokenize import TokenError
+from rest_framework import serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework import generics
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
-
+from .serializers import EmptySerializer
 from doctors.views import EmptySerializer
 from .models import User, Otp
 from .permissions import IsAccountActiveAndUnfrozen
@@ -23,7 +25,7 @@ from .serializers import ( UserLoginSerializer,
                            )
 from .mail_sender import send_email
 from .utils import *
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, inline_serializer
 from doctors.serializers import DoctorProfileSerialzer
 from patients.serializers import PatientProfileSerializer
 
@@ -93,15 +95,61 @@ class VerifyOtpView(generics.GenericAPIView):
                     "access": str(refresh.access_token) 
              },
              status=200)
-
 class LogoutView(APIView):
+    """
+    تسجيل الخروج وإبطال عمل الـ Refresh Token بوضعه في القائمة السوداء.
+    """
     permission_classes = [IsAuthenticated]
-    serializer_class = EmptySerializer  # الحل النهائي
-    def post(self, request):
-        print(request.data)
-        return Response(status=200)
+    serializer_class = EmptySerializer  # لتوثيق الواجهة بشكل سليم
 
+    @extend_schema(
+        summary="User Logout / Blacklist Token",
+        description="Invalidate the refresh token upon user logout.",
+        request=inline_serializer(
+            name='LogoutRequest',
+            fields={
+                'refresh_token': drf_serializers.CharField(required=True, help_text="The refresh token to be blacklisted.")
+            }
+        ),
+        responses={
+            200: inline_serializer(
+                name='LogoutResponse',
+                fields={'message': drf_serializers.CharField()}
+            ),
+            400: drf_serializers.DictField()
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        # استخراج الـ refresh_token من جسم الطلب
+        refresh_token = request.data.get("refresh_token")
+        
+        if not refresh_token:
+            return Response(
+                {"error": "refresh_token field is required in request body."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        try:
+            # محاولة جلب التوكن وإضافته للقائمة السوداء
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response(
+                {"message": "Logged out successfully. Token has been blacklisted."}, 
+                status=status.HTTP_200_OK
+            )
+            
+        except TokenError as e:
+            return Response(
+                {"error": "Invalid or expired refresh token."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            # في حال لم تكن حزمة البلاكليست مفعلة في الإعدادات أو حدث خطأ آخر
+            return Response(
+                {"error": "Blacklisting feature is not enabled or an error occurred."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
 class PasswordResetView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
     serializer_class = PasswordResetSerializer

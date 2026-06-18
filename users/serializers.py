@@ -9,6 +9,11 @@ from django.contrib.auth.hashers import make_password , check_password
 from django.db import transaction
 import uuid
 import threading
+
+
+class EmptySerializer(serializers.Serializer):
+    pass
+
 class UserSerializer(serializers.ModelSerializer):
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
     email = serializers.EmailField(validators=[])

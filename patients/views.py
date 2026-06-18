@@ -3,7 +3,7 @@ from appointments.models import Appointment
 from .models import *
 from rest_framework.response import Response
 from rest_framework import generics
-from .serializers import PatientRegisterSerializer , PatientProfileSerializer , GoogleAuthSerializer
+from .serializers import PatientRegisterSerializer, PatientProfileSerializer, GoogleAuthSerializer
 from rest_framework import permissions
 from users.permissions import IsAccountActiveAndUnfrozen, IsPatient, IsDoctor
 from google.auth.transport import requests
@@ -23,17 +23,49 @@ class PatientRegisterView(generics.CreateAPIView):
     
     def create(self, request, *args, **kwargs):
         super().create(request, *args, **kwargs)
-        return Response({"message": "Patient registered successfully"
-                          , "is_verified":False},
-                           status=201)
+        return Response(
+            {"message": "Patient registered successfully", "is_verified": False},
+            status=201
+        )
 
 class PatientProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = PatientProfileSerializer
     queryset = Patient.objects.all()
     permission_classes = [permissions.IsAuthenticated, IsPatient, IsAccountActiveAndUnfrozen]
+    
     def get_object(self):
         return self.request.user.patient
 
+class DoctorRetrievePatientView(generics.RetrieveAPIView):
+    queryset = Patient.objects.all()
+    serializer_class = PatientProfileSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
+    
+    def get_object(self):
+        patient = super().get_object()
+        doctor = self.request.user.doctor
+        
+        # 1. التحقق: هل توجد جلسة "قادمة" أو "نشطة"؟
+        has_active_appointment = Appointment.objects.filter(
+            doctor=doctor, 
+            patient=patient,
+            status__in=['scheduled', 'confirmed']
+        ).exists()
+
+        # 2. التحقق: هل توجد جلسة مكتملة ولكن المريض حدد وجود جلسة قادمة (has_next_session=True)؟
+        # (هذا يعني أن العلاقة العلاجية لم تنتهِ بعد)
+        has_ongoing_course = Appointment.objects.filter(
+            doctor=doctor,
+            patient=patient,
+            status=Appointment.Status.Completed,
+            has_next_session=True
+        ).exists()
+
+        # إذا لم يكن هناك موعد نشط ولم يكن هناك كورس علاجي مستمر، نمنع الوصول
+        if not (has_active_appointment or has_ongoing_course):
+            raise PermissionDenied("You do not have permission to view this patient's profile.")
+            
+        return patient
 
 class GoogleAuthView(APIView):
     serializer_class = GoogleAuthSerializer
@@ -70,34 +102,3 @@ class GoogleAuthView(APIView):
                 "role": "patient"
             }, status=status.HTTP_200_OK)
             
-
-class DoctorRetrievePatientView(generics.RetrieveAPIView):
-    queryset = Patient.objects.all()
-    serializer_class = PatientProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDoctor, IsAccountActiveAndUnfrozen]
-    
-def get_object(self):
-        patient = super().get_object()
-        doctor = self.request.user.doctor
-        
-        # 1. التحقق: هل توجد جلسة "قادمة" أو "نشطة"؟
-        has_active_appointment = Appointment.objects.filter(
-            doctor=doctor, 
-            patient=patient,
-            status__in=['scheduled', 'confirmed']
-        ).exists()
-
-        # 2. التحقق: هل توجد جلسة مكتملة ولكن المريض حدد وجود جلسة قادمة (has_next_session=True)؟
-        # (هذا يعني أن العلاقة العلاجية لم تنتهِ بعد)
-        has_ongoing_course = Appointment.objects.filter(
-            doctor=doctor,
-            patient=patient,
-            status=Appointment.Status.Completed,
-            has_next_session=True
-        ).exists()
-
-        # إذا لم يكن هناك موعد نشط ولم يكن هناك كورس علاجي مستمر، نمنع الوصول
-        if not (has_active_appointment or has_ongoing_course):
-            raise PermissionDenied("You do not have permission to view this patient's profile. No active sessions or ongoing treatment courses found.")
-
-        return patient

@@ -30,10 +30,13 @@ class Note(models.Model):
         return f"Note #{self.id} by {self.creator.username}"
 
     def save(self, *args, **kwargs):
-        # Strict rule: If the note was already shared, deny any content updates (Static text)
-        if self.pk:
-            original = Note.objects.get(pk=self.pk)
-            if original.is_shared:
-                raise ValidationError("This note has already been shared and its content cannot be modified.")
-        
-        super().save(*args, **kwargs)
+            # التحقق الذكي باستخدام values_list الخفيف لتجنب الاستعلامات المكررة
+            if self.pk:
+                # جلب حالة الحقل is_shared كقيمة مباشرة وسريعة
+                already_shared = Note.objects.filter(pk=self.pk).values_list('is_shared', flat=True).first()
+                if already_shared and not self.is_shared:
+                    # إذا كانت الملاحظة مشتركة مسبقاً وتم محاولة إلغاء المشاركة، يتم حذف البلاغات المتعلقة بها
+                    from reports.models import AppReport  # استيراد محلي لتجنب التداخل الدائري
+                    AppReport.objects.filter(target_id=self.pk, report_type='note').delete()
+                    
+            super().save(*args, **kwargs)

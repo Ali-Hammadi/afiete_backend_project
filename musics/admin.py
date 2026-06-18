@@ -1,4 +1,6 @@
 from django.contrib import admin
-from .models import *
+from .models import BreathingExerciseEntity, MusicEntity
+
 # Register your models here.
-admin.site.register([BreathingExerciseEntity, MusicEntity]) 
+admin.site.register(BreathingExerciseEntity)
+admin.site.register(MusicEntity)

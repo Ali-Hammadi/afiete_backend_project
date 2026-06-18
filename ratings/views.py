@@ -13,6 +13,7 @@ from users.permissions import IsPatient
 from appointments.models import Appointment
 from users.utils import is_doctor
 from rest_framework import serializers
+
 class EmptySerializer(serializers.Serializer):
     pass
 
@@ -78,12 +79,16 @@ class RatingListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAccountActiveAndUnfrozen]
 
     def get_queryset(self):
+        # 1. حماية وتخطي التوثيق التلقائي (Swagger) بأمان
         if getattr(self, 'swagger_fake_view', False):
-            doctor_username = self.kwargs.get('doctor_username')
+            return Rating.objects.none()
 
-            # إذا لم يتم تمرير اسم مستخدم وكان المستخدم الحالي طبيباً， يعرض تقييماته الخاصة
-            if not doctor_username and is_doctor(self.request.user):
-                return Rating.objects.filter(
+        # 2. استخراج الـ username وعزله خارج شرط Swagger ليكون متاحاً لكافة الطلبات الحقيقية
+        doctor_username = self.kwargs.get('doctor_username')
+
+        # إذا لم يتم تمرير اسم مستخدم وكان المستخدم الحالي طبيباً، يعرض تقييماته الخاصة
+        if not doctor_username and is_doctor(self.request.user):
+            return Rating.objects.filter(
                 appointment__doctor=self.request.user.doctor
             ).order_by('-created_at')
         
