@@ -58,25 +58,41 @@ class ArticleListAPIView(generics.ListAPIView):
             return objs.filter(author=user.doctor, status="Approved").order_by('-score')
         
         return objs.filter(author=self.request.user.doctor).order_by('-created_at')
-
 class RecommendedArticlesAPIView(generics.ListAPIView):
     pagination_class = ArticlePagination
-    serializer_class = PatientArticleSerializer # المريض يرى التوصيات بدون حقول إدارية زائدة
+    serializer_class = PatientArticleSerializer  # المريض يرى التوصيات بدون حقول إدارية زائدة
     permission_classes = [permissions.IsAuthenticated, IsPatient]
 
     def get_queryset(self):
-        if getattr(self, 'swagger_fake_view', False):
-            recommended_ids = recommend_articles(patient=self.request.user.patient)
+        user = self.request.user
         
+        # التعامل مع طلبات توثيق السواجر تلقائياً لتجنب الأخطاء أثناء الـ Schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Article.objects.with_reactions(user=user).filter(status="Approved")
+
+        # 1. جلب معرفات المقالات الموصى بها بناءً على ملف المريض
+        try:
+            recommended_ids = recommend_articles(patient=user.patient)
+        except Exception:
+            recommended_ids = None
+
+        # 2. خطة البديل الجاهز (Fallback): إذا لم يجرِ المريض اختباراً أو كانت قائمة التوصيات فارغة
+        if not recommended_ids:
+            return Article.objects.with_reactions(user=user)\
+                .filter(status='Approved')\
+                .order_by('-score', '-created_at')  # الترتيب حسب الأعلى تقييماً ثم الأحدث
+
+        # 3. في حال وجود توصيات: يتم جلبها وترتيبها حسب الأهمية التي حددها نظام التوصية
         order = Case(
             *[When(id=aid, then=pos) for pos, aid in enumerate(recommended_ids)],
             output_field=IntegerField()
         )
         
-        return Article.objects.with_reactions(user=self.request.user)\
+        return Article.objects.with_reactions(user=user)\
             .filter(id__in=recommended_ids, status='Approved')\
             .annotate(relevance_order=order)\
             .order_by('relevance_order', '-score')
+
 
 class AllApprovedArticlesListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
