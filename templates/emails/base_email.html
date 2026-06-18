@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; padding: 20px; }
+        .card { max-width: 600px; margin: auto; background: #ffffff; padding: 40px; border-radius: 12px; border: 1px solid #e0e0e0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header { text-align: center; color: #2c3e50; margin-bottom: 30px; }
+        .content { color: #555; line-height: 1.8; font-size: 16px; }
+        .btn { display: block; width: 200px; margin: 30px auto; padding: 12px; background-color: #3498db; color: #ffffff !important; text-align: center; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h2>Afiete Project</h2>
+        </div>
+        <div class="content">
+            <p>Hello <strong>{{ user_name }}</strong>,</p>
+            <p>{{ message_body|safe }}</p>
+        </div>
+        <a href="{{ action_url }}" class="btn">Visit Afiete</a>
+        <div class="footer">
+            <p>This is an automated message. Please do not reply.</p>
+            <p>&copy; 2026 Afiete Project. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,106 +1,56 @@
-import smtplib
-import ssl
-from email.message import EmailMessage
-import socket
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.conf import settings
 
-def send_email(receiver_email, otp_code=None , process="verification"):
+def send_professional_email(receiver_email, process, otp=None, user_name="User"):
+    # 1. تحديد بيانات الإيميل بناءً على العملية (Process)
+    email_data = {
+        "verification": {
+            "subject": "Verify Your Account - Afiete",
+            "body": f"Welcome to Afiete! To complete your verification, please use the following code: <strong>{otp}</strong>"
+        },
+        "Doctor Accepted": {
+            "subject": "Afiete - Doctor Application Accepted",
+            "body": "Congratulations! We are pleased to inform you that your application to join the Afiete team has been accepted."
+        },
+        "Doctor Rejected": {
+            "subject": "Afiete - Application Update",
+            "body": "Thank you for your interest in Afiete. After careful review, we regret to inform you that we cannot proceed with your application at this time."
+        },
+        "Email Reset": {
+            "subject": "Afiete - Password Reset",
+            "body": f"You requested a password reset. Your OTP is: <strong>{otp}</strong>"
+        }
+    }
 
-    smtp_server = "smtp.gmail.com"
-    port = 587
-    sender_email = "afiete2026@gmail.com"
-    sender_password = "nmmsuchwtfunhwhy" # eco password not real for security
-    subject = "Welcome to Afiete"
-    is_html=False
-    body = ' '
-    if process == "verification":
-        body = f"""Hello,
+    # الحصول على البيانات، أو إرجاع قيم افتراضية إذا لم يوجد الـ process
+    info = email_data.get(process, {"subject": "Update from Afiete", "body": "Thank you for using Afiete."})
 
-I hope you are doing well.
+    # 2. تجهيز السياق للقالب (Context)
+    context = {
+        "title": info["subject"],
+        "user_name": user_name,
+        "message_body": info["body"],
+        "action_url": "https://alihammadi.pythonanywhere.com/login" # رابط الموقع
+    }
 
-I would like to request a One-Time Password {otp_code} to complete my account verification process.
-Please send the OTP to this email address or provide guidance on how I can receive it.
+    # 3. تحويل القالب لـ HTML
+    html_content = render_to_string('emails/base_email.html', context)
+    text_content = "Please view this email in an HTML-compatible client."
 
-Thank you for your assistance.
-
-Best regards,
-Afiete Team"""
-    elif process == "Doctor Accepted":
-        subject = "Afiete - Doctor Accepted"
-        body = f"""
-        Hello Doctor, 
-        We are pleased to inform you that your application to join Afiete has been accepted. 
-        We look forward to having you as part of our community and working together to provide excellent healthcare"""
+    # 4. إعداد وإرسال الإيميل
+    msg = EmailMultiAlternatives(
+        subject=info["subject"],
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[receiver_email]
+    )
     
+    msg.attach_alternative(html_content, "text/html")
     
-    elif process == "Doctor Rejected":
-        subject = "Afiete - Doctor Rejected"
-        body = f""" Hello Doctor,
-        We regret to inform you that your application to join Afiete has been rejected. 
-        We appreciate your interest in our platform and encourage you to apply again in the future.
-        """
-    elif process == "Email Reset":
-        subject = "Afiete - Email Reset"
-        body = f""" Hello,
-        You have been reset email,
-        wa want to check,
-        your one time password otp:{otp_code}
-        Afiete Team
-        """
     try:
-        # إنشاء الرسالة
-        msg = EmailMessage()
-        msg["From"] = sender_email
-        msg["To"] = receiver_email
-        msg["Subject"] = subject
-        print(len(sender_password))
-
-        if is_html:
-            msg.add_alternative(body, subtype='html')
-        else:
-            msg.set_content(body)
-
-        # إنشاء اتصال آمن
-        context = ssl.create_default_context()
-
-        try:
-            with smtplib.SMTP(smtp_server, port, timeout=10) as server:
-                server.starttls(context=context)
-
-                try:
-                    server.login(sender_email, sender_password)
-                except smtplib.SMTPAuthenticationError as e:
-                    # print("❌ خطأ في تسجيل الدخول: تحقق من الإيميل أو كلمة المرور")
-                    # print(e)
-                    return False
-
-                try:
-                    server.send_message(msg)
-                    # print("✅ تم إرسال الإيميل بنجاح")
-                    return True
-
-                except smtplib.SMTPRecipientsRefused:
-                    # print("❌ الإيميل المستلم مرفوض")
-                    return False
-                except smtplib.SMTPException as e:
-                    # print(f"❌ خطأ أثناء الإرسال: {e}")
-                    return False
-                return False
-
-        except smtplib.SMTPConnectError:
-            # print("❌ فشل الاتصال بالسيرفر")
-            return False
-        except smtplib.SMTPServerDisconnected:
-            # print("❌ السيرفر قطع الاتصال")
-            return False    
-        except socket.gaierror:
-            #   print("❌ خطأ في DNS أو اسم السيرفر غير صحيح")
-            return False
-        except TimeoutError:
-            # print("❌ انته ت مهلة الاتصال (Timeout)")
-                return False
-        return False
-
+        msg.send()
+        return True
     except Exception as e:
-        # print(f"❌ خطأ غير متوقع: {e}")
+        print(f"Error sending email: {e}")
         return False
-    

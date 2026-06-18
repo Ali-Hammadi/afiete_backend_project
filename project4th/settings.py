@@ -70,6 +70,10 @@ ROOT_URLCONF = 'project4th.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'], 
+    },
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -165,16 +169,17 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
 
-# Email Configurations (SMTP) - Secured via .env
+# Email Configurations (SMTP)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'smtp-relay.brevo.com' # سيرفر Brevo الاحترافي
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+# البيانات الخاصة بك
+EMAIL_HOST_USER = 'hamadea524@gmail.com' 
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-SUPPORT_EMAIL = config('SUPPORT_EMAIL', default='your@gmail.com')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='your@gmail.com')
+DEFAULT_FROM_EMAIL = 'Afiete <afiete@2025gmail.com>'
+SUPPORT_EMAIL = 'afiete@2025gmail.com'
 
 # Celery Broker & Beat Configurations
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
