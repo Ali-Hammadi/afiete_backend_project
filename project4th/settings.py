@@ -166,15 +166,16 @@ SIMPLE_JWT = {
 }
 
 # Email Configurations (SMTP)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp-relay.brevo.com'
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = 'smtp-relay.brevo.com'  # تأكد من هذا السطر
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
 # البيانات الخاصة بك
-EMAIL_HOST_USER = 'hamadea524@gmail.com' 
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'Afiete <afiete@2025gmail.com>'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
 SUPPORT_EMAIL = 'afiete@2025gmail.com'
 
 # Celery Broker & Beat Configurations
