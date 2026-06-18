@@ -9,18 +9,16 @@ from decimal import Decimal
 import os
 from pathlib import Path
 from decouple import RepositoryEnv, config
+from dotenv import load_dotenv
 from uvicorn import Config
 
-# 1. تحديد مسار المشروع الرئيسي (حيث يوجد manage.py)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 2. إجبار decouple على قراءة الملف من المسار الصحيح
-env_file_path = os.path.join(BASE_DIR, '.env')
-config = Config(RepositoryEnv(env_file_path))
+# تحميل ملف .env من مجلد الجذر
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# 3. الآن استخدم config كما كنت تستخدمه
-SECRET_KEY = config('SECRET_KEY')
-
+# جلب المتغيرات
+SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # النطاقات المسموحة للعمل على السيرفر المحلي والإنتاج
