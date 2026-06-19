@@ -9,7 +9,7 @@ from users.serializers import UserDoctorSerializer
 from appointments.serializers import PricesSerializer
 
 from django.db import transaction 
-from users.mail_sender import send_email
+from users.mail_sender import send_professional_email
 from threading import Thread
 from django.contrib.auth.hashers import make_password
 from django.db.models import Q
@@ -34,7 +34,7 @@ class DoctorRegisterSerializer(serializers.ModelSerializer):
             code = Otp.generate_otp()
             hash_code = make_password(code)
             Otp.objects.create(user=user, code=hash_code)    
-        Thread(target=send_email, args=(user.email, code)).start()
+        Thread(target=send_professional_email, args=(user.email, code)).start()
         
         return doctor
 

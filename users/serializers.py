@@ -3,7 +3,7 @@ from users.models import User
 from users.models import Otp
 from rest_framework_simplejwt.tokens import RefreshToken
 from .utils import is_doctor , is_patient
-from .mail_sender import send_email
+from .mail_sender import send_professional_email
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password , check_password
 from django.db import transaction
@@ -122,7 +122,7 @@ class ResendOtpSerializer(serializers.Serializer):
             code= hashed_code
         )
 
-        threading.Thread(target=send_email, args=(user.email, code)).start()
+        threading.Thread(target=send_professional_email, args=(user.email, code)).start()
 
         return {"message": "New OTP generated and sent successfully"}
     
@@ -214,7 +214,7 @@ class EmailResetSerializer(serializers.ModelSerializer):
                 user=user,
                 code= hashed_code
             )
-        threading.Thread(target=send_email, args=(user.email, code)).start()
+        threading.Thread(target=send_professional_email, args=(user.email, code)).start()
         return user
 
 class ForgetPasswordSerializer(serializers.Serializer):
@@ -235,7 +235,7 @@ class ForgetPasswordSerializer(serializers.Serializer):
         hashed_code = make_password(code)
         Otp.objects.create(user=user, code=hashed_code)
 
-        threading.Thread(target=send_email, args=(user.email, code)).start()
+        threading.Thread(target=send_professional_email, args=(user.email, code)).start()
 
         return validated_data   
 
@@ -331,5 +331,5 @@ class ActivateUserSerializer(serializers.Serializer):
             code= hashed_code
         )
 
-        threading.Thread(target=send_email, args=(user.email, code)).start()
+        threading.Thread(target=send_professional_email, args=(user.email, code)).start()
         return validated_data

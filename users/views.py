@@ -23,7 +23,7 @@ from .serializers import ( UserLoginSerializer,
                            DeactivateUserSerializer,
                            ActivateUserSerializer
                            )
-from .mail_sender import send_email
+from .mail_sender import send_professional_email
 from .utils import *
 from drf_spectacular.utils import extend_schema, inline_serializer
 from doctors.serializers import DoctorProfileSerialzer

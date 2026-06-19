@@ -4,7 +4,7 @@ from .models import Patient
 from random import randint
 from users.models import User
 from users.models import Otp
-from users.mail_sender import send_email
+from users.mail_sender import send_professional_email
 from users.serializers import UserSerializer
 from django.contrib.auth.hashers import make_password
 from users.serializers import UserSerializer
@@ -33,7 +33,7 @@ class PatientRegisterSerializer(serializers.ModelSerializer):
             Otp.objects.create(user=user, code=hashed_otp_code)
         
         # سيتم نقل هذا الخيط الخام (Thread) إلى مهمة Celery في المرحلة الثانية لزيادة الأمان والأداء
-        Thread(target=send_email, args=(user.email, otp_code)).start()
+        Thread(target=send_professional_email, args=(user.email, otp_code)).start()
         return patient
 
 class UserUpdateSerializer(serializers.ModelSerializer):
