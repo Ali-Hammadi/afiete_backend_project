@@ -5,7 +5,7 @@ from django.conf import settings
 def send_professional_email(receiver_email, process, otp=None, user_name="User"):
     # 1. تحديد بيانات الإيميل بناءً على القيمة التي تصل (process)
     # بما أنك ترسل كود الـ OTP مكان الـ process، سنتحقق إذا كان المدخل عبارة عن أرقام (OTP)
-    if str(process).isdigit() and len(str(process)) <= 6:
+    if str(process).isdigit() and len(str(process)) <= 4:
         subject = "Verify Your Account - Afiete"
         body = "Welcome to Afiete! To complete your verification, please use the following code:"
         action_url = None
