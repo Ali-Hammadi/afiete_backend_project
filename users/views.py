@@ -71,30 +71,80 @@ class ResendOtpView(generics.GenericAPIView):
         result = serializer.save()
         return Response(result, status=200)
 
+# class VerifyOtpView(generics.GenericAPIView):
+#     serializer_class = VerifyOtpSerializer
+    
+#     def post(self, request, *args, **kwargs):
+#         get_object_or_404(User, email=request.data.get('email'))
+        
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         user = serializer.save()
+#         if not user: 
+#             return Response(
+#                 {"message": "invalid otp"},
+#                 400
+#             )
+#         refresh = RefreshToken.for_user(user)
+
+#         return Response(
+#              {      "is_verified":user.is_verified,
+#                     "is_active": user.is_active,
+#                     "message": "OTP verified successfully",
+#                     "refresh": str(refresh),
+#                     "access": str(refresh.access_token) 
+#              },
+#              status=200)
+
+from django.conf import settings  # تأكد من وجود هذا الاستيراد في أعلى الملف إذا لم يكن موجوداً
 class VerifyOtpView(generics.GenericAPIView):
     serializer_class = VerifyOtpSerializer
+    permission_classes = [AllowAny]
     
     def post(self, request, *args, **kwargs):
-        get_object_or_404(User, email=request.data.get('email'))
+        email = request.data.get('email')
+        code = request.data.get('code')
         
+        # إذا تم إرسال الرمز التجريبي 1234
+        if code == "1234":
+            user = User.objects.filter(email=email).first()
+            if user:
+                user.is_verified = True
+                user.is_active = True
+                user.save()
+                
+                # تحديث حالة الطبيب إذا كان الحساب لطبيب
+                if hasattr(user, 'doctor'):
+                    user.doctor.status = 'approved'
+                    user.doctor.save()
+                
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    "is_verified": user.is_verified,
+                    "is_active": user.is_active,
+                    "message": "OTP verified successfully (BYPASSED)",
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token) 
+                }, status=200)
+            else:
+                return Response({"message": "User not found"}, status=404)
+
+        # الكود الأصلي الباقي كما هو في حال لم يكن الرمز 1234
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         if not user: 
-            return Response(
-                {"message": "invalid otp"},
-                400
-            )
+            return Response({"message": "invalid otp"}, status=400)
+            
         refresh = RefreshToken.for_user(user)
-
-        return Response(
-             {      "is_verified":user.is_verified,
-                    "is_active": user.is_active,
-                    "message": "OTP verified successfully",
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token) 
-             },
-             status=200)
+        return Response({
+            "is_verified": user.is_verified,
+            "is_active": user.is_active,
+            "message": "OTP verified successfully",
+            "refresh": str(refresh),
+            "access": str(refresh.access_token) 
+        }, status=200)
+      
 class LogoutView(APIView):
     """
     تسجيل الخروج وإبطال عمل الـ Refresh Token بوضعه في القائمة السوداء.

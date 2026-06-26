@@ -27,6 +27,7 @@ urlpatterns = [
         path('assessment/', include('assessments.urls')),            
         path('ratings/', include('ratings.urls')),
         path('musics/', include('musics.urls_patient')), 
+        path('prescriptions/', include('prescriptions.urls_patient')), # روابط وصفات المريض تم إضافتها هنا
         # path('notifications/', include('notifications.urls_patient')),
         
         path('notes/', include(patient_router.urls)), 
@@ -38,6 +39,7 @@ urlpatterns = [
         path('appointments/', include('appointments.urls_doctor')),  
         path('articles/', include('articles.urls_doctor')),          
         path('patients/', include('patients.urls_doctor')), 
+        path('prescriptions/', include('prescriptions.urls_doctor')), # روابط وصفات الطبيب تم إضافتها هنا
          
         # path('notifications/', include('notifications.urls_doctor')),
         path('notes/', include(doctor_router.urls)), 

@@ -22,8 +22,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # النطاقات المسموحة للعمل على السيرفر المحلي والإنتاج
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default="alihammadi.pythonanywhere.com,127.0.0.1,localhost").split(',')
-
+# ALLOWED_HOSTS = config('ALLOWED_HOSTS', default="alihammadi.pythonanywhere.com,127.0.0.1,localhost").split(',')
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'articles',
     'musics',
     'notes',
+    'prescriptions',
     # المكتبات الخارجية والإضافات
     'rest_framework',
     'drf_spectacular',
@@ -123,8 +124,9 @@ USE_TZ = True
 # Static & Media Files Configurations
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'static'
+STATIC_URL = '/static/'
+# غيرنا الاسم هون لـ staticfiles عشان ما يتضارب لوكال
+STATIC_ROOT = BASE_DIR / 'staticfiles' 
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

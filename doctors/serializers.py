@@ -200,7 +200,7 @@ class AvailableSlotsSerializer(serializers.Serializer):
         booked_slots = []
         for app in existing_appointments:
             app_start = app.date.time()
-            app_end = (app.date + timedelta(minutes=app.duration)).time()
+            app_end = (app.date + timedelta(minutes=app.duration_slots * 30)).time()            
             booked_slots.append((app_start, app_end))
 
         slot_duration = timedelta(minutes=30)
